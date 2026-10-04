@@ -1,0 +1,14 @@
+{
+  "name": "Insumos Lifting",
+  "short_name": "Insumos",
+  "description": "Punto de venta, stock y despachos de Insumos Lifting",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fbf7f8",
+  "theme_color": "#b0476b",
+  "lang": "es-CL",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

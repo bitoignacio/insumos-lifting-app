@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Insumos Lifting · Punto de venta</title>
+  <meta name="theme-color" content="#b0476b">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><img src="icon.svg" alt="" width="28" height="28"> Insumos Lifting</div>
+    <nav class="tabs" id="tabs">
+      <button data-view="vender" class="active">Vender</button>
+      <button data-view="ventas">Ventas</button>
+      <button data-view="inventario">Inventario</button>
+      <button data-view="compras">Compras</button>
+      <button data-view="clientes">Clientes</button>
+      <button data-view="resumen">Resumen</button>
+      <button data-view="ajustes">Ajustes</button>
+    </nav>
+    <button class="sync" id="syncBadge" title="Estado de sincronización">●</button>
+  </header>
+
+  <main id="view"></main>
+
+  <div class="modal-backdrop" id="modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-head"><h2 id="modalTitle"></h2><button class="icon" id="modalClose" aria-label="Cerrar">✕</button></div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="db.js"></script>
+  <script src="sync.js"></script>
+  <script src="print.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
