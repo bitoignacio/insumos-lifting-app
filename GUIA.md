@@ -18,8 +18,13 @@
 5. En la app, **Ajustes**: pega la URL y la clave, y toca **Guardar**. Debe decir "Conectado con la planilla".
 6. Repite el paso 5 en cada celular o computador que use la app.
 
+## MercadoPago (link de pago)
+1. En [mercadopago.cl/developers](https://www.mercadopago.cl/developers) entra a **Tus integraciones**, crea una aplicación y copia el **Access Token de producción**.
+2. En el Apps Script: ícono ⚙ **Configuración del proyecto > Propiedades de la secuencia de comandos > Agregar propiedad**. Nombre `MP_TOKEN`, valor: el token.
+3. En la app, al elegir **MercadoPago** el botón dice **Generar link de pago**. La venta queda **pendiente de pago** y los productos reservados. La app revisa sola cada pocos minutos y cierra la venta cuando MercadoPago confirma el pago. También puedes tocar **Revisar pago**, **Marcar como pagada** o **Cancelar venta**.
+
 ## Cargar los productos
-1. En la hoja **Carga de productos** completa Precio costo, Precio venta y Stock actual.
+1. En la hoja **Carga de productos** ya están tus precios; completa el Stock actual.
 2. Productos con opciones: una fila por opción, repitiendo el nombre del producto.
 3. En la app, **Ajustes > Importar desde la hoja "Carga de productos"**.
 
@@ -29,5 +34,4 @@ Abre la dirección de la app en el navegador del celular y elige **Agregar a pan
 ## Pendiente
 - Generar la etiqueta oficial de Starken y Blue Express desde la app (necesita las credenciales de integración de cada cuenta empresa).
 - Emitir boleta / factura electrónica (según el sistema de facturación que usen).
-- Link de pago MercadoPago (si se quiere generar desde la app).
 - Usuarios con permisos distintos.
