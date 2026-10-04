@@ -121,4 +121,10 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--brand-soft);
   background: transparent; padding: 10px 12px; cursor: pointer; }
 .list-pick button:hover { background: var(--brand-soft); }
 .products > .empty { grid-column: 1 / -1; }
+/* En computador el recuadro de venta tiene su propio scroll y el total con el botón quedan siempre a la vista. */
+@media (min-width: 901px) {
+  .cart { max-height: calc(100vh - 88px); overflow-y: auto; overscroll-behavior: contain; padding-bottom: 0; }
+  .cart-foot { position: sticky; bottom: 0; background: var(--surface); padding: 8px 0 16px; margin-top: 12px; border-top: 1px solid var(--line); }
+}
+.cart-foot > * + * { margin-top: 12px; }
 @media (max-width: 900px) { .cart { position: static; } }

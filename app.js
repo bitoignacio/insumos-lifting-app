@@ -254,7 +254,7 @@ const App = (() => {
             <div class="grid2"><div><label>Razón social *</label><input id="facRazon" value="${esc(cart.factura?.razonSocial || '')}"></div>
               <div><label>RUT *</label><input id="facRut" value="${esc(cart.factura?.rut || '')}" placeholder="12.345.678-9"></div></div>
             <div><label>Giro (opcional)</label><input id="facGiro" value="${esc(cart.factura?.giro || '')}"></div></div>` : ''}
-          <div class="totals num">
+          <div class="cart-foot"><div class="totals num">
             <div><span>Subtotal</span><span>${clp(t.subtotal)}</span></div>
             ${t.descuento ? `<div><span>Descuento</span><span>-${clp(t.descuento)}</span></div>` : ''}
             ${t.envio ? `<div><span>Envío</span><span>${clp(t.envio)}</span></div>` : ''}
@@ -263,7 +263,7 @@ const App = (() => {
           <div class="row">
             <button class="btn" id="clearCart" ${cart.lines.length ? '' : 'disabled'}>Vaciar</button>
             <button class="btn primary grow" id="checkout" ${cart.lines.length ? '' : 'disabled'}>${cart.medioPago === 'MercadoPago' ? 'Generar link de pago' : 'Registrar venta'}</button>
-          </div>
+          </div></div>
         </aside>
       </div>`;
     },
