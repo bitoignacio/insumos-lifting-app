@@ -21,7 +21,10 @@ const HOJAS = {
   ventas: { nombre: 'Ventas', columnas: ['id', 'folio', 'fecha', 'usuario', 'clienteId', 'subtotal', 'descuento', 'total', 'medioPago', 'estado', 'documentoTipo', 'documentoNumero', 'documentoEstado'] },
   compras: { nombre: 'Compras', columnas: ['id', 'folio', 'fecha', 'proveedor', 'documento', 'total', 'usuario'] },
   movimientos: { nombre: 'Movimientos', columnas: ['id', 'varianteId', 'cantidad', 'tipo', 'refId', 'fecha', 'nota'] },
+  proveedores: { nombre: 'Proveedores', columnas: ['id', 'nombre', 'rut', 'telefono', 'email', 'notas'] },
 };
+const VERSION = 2;
+const COLUMNAS_DESPACHOS = ['ventaId', 'folio', 'fecha', 'empresa', 'costo', 'estado', 'seguimiento', 'cliente', 'direccion', 'comuna', 'telefono', 'pago'];
 const FIJAS = ['actualizado', 'eliminado', 'datos'];
 const HOJA_CARGA = 'Carga de productos';
 
@@ -34,7 +37,7 @@ function configurar() {
   }
   Object.keys(HOJAS).forEach(hoja);
   hojaSimple('Detalle ventas', ['ventaId', 'folio', 'fecha', 'producto', 'sku', 'cantidad', 'precio', 'descuento', 'total', 'costo', 'ganancia']);
-  hojaSimple('Despachos', ['ventaId', 'folio', 'fecha', 'empresa', 'costo', 'estado', 'seguimiento', 'cliente', 'direccion', 'comuna', 'telefono']);
+  hojaSimple('Despachos', COLUMNAS_DESPACHOS);
   hojaSimple('Stock', ['varianteId', 'producto', 'opcion', 'sku', 'costo', 'precio', 'stock']);
   Logger.log('CLAVE para la app: ' + clave);
 }
@@ -52,7 +55,7 @@ function doPost(e) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    if (body.action === 'ping') return json({ ok: true });
+    if (body.action === 'ping') return json({ ok: true, version: VERSION });
     if (body.action === 'push') return json(push(body.ops || []));
     if (body.action === 'pull') return json(pull(body.since || ''));
     if (body.action === 'carga') return json(carga());
@@ -111,7 +114,9 @@ function push(ops) {
     Object.values(porTabla[tabla]).forEach(rec => {
       rec.sincronizado = ahora;
       if (tabla === 'ventas' && rec.documento) { rec.documentoTipo = rec.documento.tipo; rec.documentoNumero = rec.documento.numero || ''; rec.documentoEstado = rec.documento.estado; }
-      const row = cols.map(c => c === 'datos' ? JSON.stringify(rec) : c === 'eliminado' ? (rec.eliminado ? 'sí' : '') : valor(rec[c]));
+      const row = cols.map(c => tabla === 'clientes' && c === 'telefono' && rec.telefono ? (rec.telefonoCodigo || '+56') + ' ' + rec.telefono
+        : tabla === 'clientes' && c === 'direccion' && rec.depto ? valor(rec.direccion) + ', ' + rec.depto
+        : c === 'datos' ? JSON.stringify(rec) : c === 'eliminado' ? (rec.eliminado ? 'sí' : '') : valor(rec[c]));
       if (fila[rec.id]) sh.getRange(fila[rec.id], 1, 1, cols.length).setValues([row]);
       else nuevas.push(row);
     });
@@ -119,7 +124,7 @@ function push(ops) {
   });
   if (porTabla.ventas) actualizarDetalleVentas(Object.values(porTabla.ventas));
   if (porTabla.movimientos || porTabla.variantes || porTabla.productos) actualizarStock();
-  return { ok: true, guardados: ops.length };
+  return { ok: true, guardados: ops.length, version: VERSION };
 }
 
 // Devuelve los registros sincronizados después de "since" (para los otros dispositivos).
@@ -156,7 +161,8 @@ function leerTabla(tabla) {
 
 function actualizarDetalleVentas(ventas) {
   const det = hojaSimple('Detalle ventas', ['ventaId', 'folio', 'fecha', 'producto', 'sku', 'cantidad', 'precio', 'descuento', 'total', 'costo', 'ganancia']);
-  const desp = hojaSimple('Despachos', ['ventaId', 'folio', 'fecha', 'empresa', 'costo', 'estado', 'seguimiento', 'cliente', 'direccion', 'comuna', 'telefono']);
+  const desp = hojaSimple('Despachos', COLUMNAS_DESPACHOS);
+  desp.getRange(1, 1, 1, COLUMNAS_DESPACHOS.length).setValues([COLUMNAS_DESPACHOS]).setFontWeight('bold');
   const ids = {};
   ventas.forEach(v => { ids[v.id] = true; });
   borrarFilas(det, ids);
@@ -171,7 +177,8 @@ function actualizarDetalleVentas(ventas) {
     });
     if (v.envio && v.envio.tipo === 'despacho') {
       const c = clientes[v.clienteId] || {};
-      filasDesp.push([v.id, v.folio, v.fecha, v.envio.empresa, v.envio.costo, v.envio.estado, v.envio.seguimiento || '', c.nombre || '', c.direccion || '', c.comuna || '', c.telefono || '']);
+      filasDesp.push([v.id, v.folio, v.fecha, v.envio.empresa, v.envio.costo, v.envio.estado, v.envio.seguimiento || '', c.nombre || '',
+        [c.direccion, c.depto].filter(Boolean).join(', '), c.comuna || '', c.telefono ? (c.telefonoCodigo || '+56') + ' ' + c.telefono : '', v.envio.pago || '']);
     }
   });
   if (filas.length) det.getRange(det.getLastRow() + 1, 1, filas.length, filas[0].length).setValues(filas);

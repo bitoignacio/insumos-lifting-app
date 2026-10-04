@@ -37,12 +37,13 @@ const Print = (() => {
       .big{font-size:17px;font-weight:800}.carrier{font-size:22px;font-weight:900;text-align:center}`;
     openDoc('Etiqueta ' + venta.folio, css, `<div class="l">
       <div class="carrier">${esc(env.empresa || '')}</div>
+      ${env.pago ? `<div class="box" style="text-align:center;font-size:20px;font-weight:900">${env.pago === 'Por pagar' ? 'POR PAGAR' : 'PAGADO'}</div>` : ''}
       <div class="box"><div class="k">Destinatario</div>
         <div class="big">${esc(cliente?.nombre || '')}</div>
         <div>${esc(cliente?.rut || '')}</div>
-        <div>${esc(cliente?.direccion || '')}</div>
+        <div>${esc(cliente?.direccion || '')}${cliente?.depto ? ', ' + esc(cliente.depto) : ''}</div>
         <div><b>${esc(cliente?.comuna || '')}</b>${cliente?.region ? ', ' + esc(cliente.region) : ''}</div>
-        <div>Tel: ${esc(cliente?.telefono || '')}</div></div>
+        <div>Tel: ${esc(cliente?.telefono ? (cliente.telefonoCodigo || '+56') + ' ' + cliente.telefono : '')}</div></div>
       <div class="box"><div class="k">Remitente</div>
         <div><b>${esc(empresa.nombre || 'Insumos Lifting')}</b> ${esc(empresa.rut || '')}</div>
         <div>${esc(empresa.direccion || '')}, ${esc(empresa.comuna || '')}</div>

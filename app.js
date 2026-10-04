@@ -7,7 +7,13 @@ const App = (() => {
   const int = v => Math.round(num(v));
 
   const MEDIOS_PAGO = ['Efectivo', 'Transferencia', 'MercadoPago'];
-  const EMPRESAS_ENVIO = ['Starken', 'Blue Express'];
+  const EMPRESAS_ENVIO = ['Starken', 'Blue Express', 'Pyme'];
+  const CON_PAGO_ENVIO = ['Starken', 'Blue Express']; // envío "pagado" o "por pagar" (lo paga el cliente al recibir)
+  const PAISES = [['+56', 'Chile'], ['+54', 'Argentina'], ['+51', 'Perú'], ['+591', 'Bolivia'], ['+57', 'Colombia'], ['+593', 'Ecuador'],
+    ['+58', 'Venezuela'], ['+595', 'Paraguay'], ['+598', 'Uruguay'], ['+55', 'Brasil'], ['+52', 'México'], ['+1', 'EE.UU. / Canadá'], ['+34', 'España']];
+  const REGIONES = ['Arica y Parinacota', 'Tarapacá', 'Antofagasta', 'Atacama', 'Coquimbo', 'Valparaíso', 'Metropolitana de Santiago',
+    "Libertador General Bernardo O'Higgins", 'Maule', 'Ñuble', 'Biobío', 'La Araucanía', 'Los Ríos', 'Los Lagos',
+    'Aysén del General Carlos Ibáñez del Campo', 'Magallanes y de la Antártica Chilena'];
   const ORIGENES = ['RRSS', 'Web', 'WhatsApp', 'Otro'];
   const DOCUMENTOS = ['Boleta', 'Factura', 'Sin documento'];
   const ESTADOS_ENVIO = ['Por preparar', 'Listo para enviar', 'Enviado', 'Entregado'];
@@ -34,6 +40,7 @@ const App = (() => {
   const productosActivos = () => DB.all('productos').filter(p => p.activo !== false)
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   const cliente = id => id ? DB.get('clientes', id) : null;
+  const telefonoDe = c => c && c.telefono ? `${c.telefonoCodigo || '+56'} ${c.telefono}` : '';
   function folio(prefix) {
     const d = new Date();
     const ymd = String(d.getFullYear()).slice(2) + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
@@ -44,7 +51,7 @@ const App = (() => {
 
   // ---------- Carrito ----------
   function emptyCart() {
-    return { lines: [], descTipo: '%', descValor: 0, entrega: 'retiro', empresa: EMPRESAS_ENVIO[0], envioCosto: 0,
+    return { lines: [], descTipo: '%', descValor: 0, entrega: 'retiro', empresa: EMPRESAS_ENVIO[0], envioPago: 'Pagado', envioCosto: 0,
       clienteId: null, medioPago: MEDIOS_PAGO[0], documento: DOCUMENTOS[0], nota: '' };
   }
   function loadCart() { try { return { ...emptyCart(), ...JSON.parse(localStorage.getItem('carrito') || '{}') }; } catch { return emptyCart(); } }
@@ -57,9 +64,10 @@ const App = (() => {
   function cartTotals() {
     const subtotal = cart.lines.reduce((s, l) => s + lineTotals(l).total, 0);
     const descuento = cart.descTipo === '%' ? Math.round(subtotal * (num(cart.descValor) / 100)) : Math.min(subtotal, int(cart.descValor));
-    const envio = cart.entrega === 'despacho' ? int(cart.envioCosto) : 0;
+    const envio = cart.entrega === 'despacho' && !envioPorPagar() ? int(cart.envioCosto) : 0;
     return { subtotal, descuento, envio, total: subtotal - descuento + envio };
   }
+  const envioPorPagar = () => CON_PAGO_ENVIO.includes(cart.empresa) && cart.envioPago === 'Por pagar';
   function addToCart(varianteId) {
     const v = variante(varianteId);
     const line = cart.lines.find(l => l.varianteId === varianteId);
@@ -92,7 +100,7 @@ const App = (() => {
       // Solo informativo: la boleta o factura se emite a mano en el SII y aquí se anota el número.
       documento: { tipo: cart.documento, estado: cart.documento === 'Sin documento' ? 'no aplica' : 'por emitir', numero: '' },
       envio: cart.entrega === 'despacho'
-        ? { tipo: 'despacho', empresa: cart.empresa, costo: t.envio, estado: ESTADOS_ENVIO[0], seguimiento: '' }
+        ? { tipo: 'despacho', empresa: cart.empresa, pago: CON_PAGO_ENVIO.includes(cart.empresa) ? cart.envioPago : '', costo: t.envio, estado: ESTADOS_ENVIO[0], seguimiento: '' }
         : { tipo: 'retiro' },
       // Con MercadoPago la venta queda pendiente hasta que el cliente pague; el stock queda reservado.
       estado: cart.medioPago === 'MercadoPago' ? 'pendiente' : 'completada', nota: cart.nota || '',
@@ -196,12 +204,14 @@ const App = (() => {
           </div>
           ${cart.entrega === 'despacho' ? `<div class="grid2">
             <div><label>Empresa</label><select id="empresa">${EMPRESAS_ENVIO.map(e => `<option ${cart.empresa === e ? 'selected' : ''}>${e}</option>`).join('')}</select></div>
-            <div><label>Costo envío (lo paga el cliente)</label><input id="envioCosto" inputmode="numeric" value="${cart.envioCosto || ''}" placeholder="0"></div>
+            ${CON_PAGO_ENVIO.includes(cart.empresa) ? `<div><label>Envío</label><div class="seg">${['Pagado', 'Por pagar'].map(x => `<button data-envpago="${x}" class="${cart.envioPago === x ? 'on' : ''}">${x}</button>`).join('')}</div></div>` : ''}
+            ${envioPorPagar() ? '<div class="muted" style="align-self:center">El cliente paga el envío al recibir.</div>'
+              : `<div><label>Costo envío (se cobra al cliente)</label><input id="envioCosto" inputmode="numeric" value="${cart.envioCosto || ''}" placeholder="0"></div>`}
           </div>` : ''}
           <div>
             <label>Cliente ${cart.entrega === 'despacho' ? '(obligatorio para despacho)' : '(opcional)'}</label>
             <div class="row">
-              <div class="grow">${cli ? `<b>${esc(cli.nombre)}</b><div class="muted">${esc([cli.comuna, cli.telefono].filter(Boolean).join(' · '))}</div>` : '<span class="muted">Sin cliente</span>'}</div>
+              <div class="grow">${cli ? `<b>${esc(cli.nombre)}</b><div class="muted">${esc([cli.comuna, telefonoDe(cli)].filter(Boolean).join(' · '))}</div>` : '<span class="muted">Sin cliente</span>'}</div>
               <button class="btn small" id="pickCliente">${cli ? 'Cambiar' : 'Elegir'}</button>
               ${cli ? '<button class="icon" id="clearCliente" aria-label="Quitar cliente">✕</button>' : ''}
             </div>
@@ -226,8 +236,8 @@ const App = (() => {
 
     ventas() {
       const periodo = state.ventasPeriodo || '7';
-      const desde = periodoDesde(periodo);
-      const list = DB.all('ventas').filter(v => !desde || v.fecha >= desde)
+      const rango = periodoRango('ventasPeriodo');
+      const list = DB.all('ventas').filter(v => enRango(v.fecha, rango))
         .filter(v => match(v.folio + ' ' + (cliente(v.clienteId)?.nombre || '') + ' ' + (v.documento?.numero || '') + ' ' + v.items.map(i => i.nombre).join(' '), state.ventasQ || ''))
         .filter(v => !state.porEmitir || (v.documento?.estado === 'por emitir' && v.estado !== 'anulada'))
         .sort((a, b) => b.fecha.localeCompare(a.fecha));
@@ -244,7 +254,7 @@ const App = (() => {
             <td>${new Date(v.fecha).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' })}</td>
             <td>${esc(v.folio)} ${estadoPill(v)}</td>
             <td>${esc(cliente(v.clienteId)?.nombre || '—')}</td>
-            <td>${v.envio?.tipo === 'despacho' ? `${esc(v.envio.empresa)} <span class="pill ${v.envio.estado === 'Entregado' ? 'ok' : v.envio.estado === 'Enviado' ? '' : 'warn'}">${esc(v.envio.estado)}</span>` : 'Retiro'}</td>
+            <td>${v.envio?.tipo === 'despacho' ? `${esc(v.envio.empresa)}${v.envio.pago ? ' · ' + esc(v.envio.pago) : ''} <span class="pill ${v.envio.estado === 'Entregado' ? 'ok' : v.envio.estado === 'Enviado' ? '' : 'warn'}">${esc(v.envio.estado)}</span>` : 'Retiro'}</td>
             <td>${esc(v.medioPago)}</td>
             <td>${esc(v.documento?.tipo || '')} ${v.documento?.estado === 'por emitir' && v.estado !== 'anulada' ? '<span class="pill warn">Por emitir</span>' : esc(v.documento?.numero ? 'N° ' + v.documento.numero : '')}</td>
             <td class="right num">${clp(v.total)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No hay ventas en este periodo.</td></tr>'}
@@ -291,7 +301,7 @@ const App = (() => {
     compras() {
       const list = DB.all('compras').sort((a, b) => b.fecha.localeCompare(a.fecha));
       return `<div class="card stack">
-        <div class="row"><h2 class="grow">Compras a proveedores</h2><button class="btn primary" id="newCompra">Registrar compra</button></div>
+        <div class="row"><h2 class="grow">Compras a proveedores</h2><button class="btn" id="proveedores">Proveedores</button><button class="btn primary" id="newCompra">Registrar compra</button></div>
         <p class="muted">Cada compra suma las unidades al stock y puede actualizar el precio costo.</p>
         <div class="table-wrap"><table>
           <tr><th>Fecha</th><th>Proveedor</th><th>Documento</th><th>Productos</th><th class="right">Total</th></tr>
@@ -314,7 +324,7 @@ const App = (() => {
           ${list.map(c => {
             const vs = ventas.filter(v => v.clienteId === c.id);
             return `<tr class="click" data-cliente="${c.id}"><td><b>${esc(c.nombre)}</b><div class="muted">${esc(c.rut || '')}</div></td>
-              <td>${esc(c.telefono || '')}<div class="muted">${esc(c.email || '')} ${esc(c.rrss || '')}</div></td>
+              <td>${esc(telefonoDe(c))}<div class="muted">${esc(c.email || '')} ${esc(c.rrss || '')}</div></td>
               <td>${esc(c.comuna || '')}</td><td>${esc(c.origen || '')}</td>
               <td class="right num">${vs.length} · ${clp(vs.reduce((s, v) => s + v.total, 0))}</td></tr>`;
           }).join('') || '<tr><td colspan="5" class="empty">Sin clientes.</td></tr>'}
@@ -323,8 +333,8 @@ const App = (() => {
 
     resumen() {
       const periodo = state.resPeriodo || '30';
-      const desde = periodoDesde(periodo);
-      const ventas = DB.all('ventas').filter(v => v.estado === 'completada' && (!desde || v.fecha >= desde));
+      const rango = periodoRango('resPeriodo');
+      const ventas = DB.all('ventas').filter(v => v.estado === 'completada' && enRango(v.fecha, rango));
       let neto = 0, costo = 0, envios = 0;
       const porPago = {}, porProd = {}, porOrigen = {};
       for (const v of ventas) {
@@ -407,6 +417,16 @@ const App = (() => {
     if (v.estado === 'pendiente') return '<span class="pill warn">Pago pendiente</span>';
     return '';
   }
+  function periodoRango(key) {
+    const p = state[key] || (key === 'ventasPeriodo' ? '7' : '30');
+    if (p === 'custom') {
+      const d = state[key + 'Desde'], h = state[key + 'Hasta'];
+      const hasta = h ? new Date(new Date(h + 'T00:00:00').getTime() + 864e5).toISOString() : '';
+      return { desde: d ? new Date(d + 'T00:00:00').toISOString() : '', hasta };
+    }
+    return { desde: periodoDesde(p), hasta: '' };
+  }
+  const enRango = (fecha, r) => (!r.desde || fecha >= r.desde) && (!r.hasta || fecha < r.hasta);
   function periodoDesde(p) {
     if (p === 'todo') return '';
     const d = new Date();
@@ -416,8 +436,11 @@ const App = (() => {
     return d.toISOString();
   }
   function periodoSelect(key, val) {
-    const opts = [['hoy', 'Hoy'], ['7', 'Últimos 7 días'], ['30', 'Últimos 30 días'], ['mes', 'Este mes'], ['todo', 'Todo']];
-    return `<select data-periodo="${key}" style="width:auto">${opts.map(([k, n]) => `<option value="${k}" ${val === k ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
+    const opts = [['hoy', 'Hoy'], ['7', 'Últimos 7 días'], ['30', 'Últimos 30 días'], ['mes', 'Este mes'], ['todo', 'Todo'], ['custom', 'Personalizado']];
+    const hoy = new Date().toISOString().slice(0, 10);
+    return `<select data-periodo="${key}" style="width:auto">${opts.map(([k, n]) => `<option value="${k}" ${val === k ? 'selected' : ''}>${n}</option>`).join('')}</select>
+      ${val === 'custom' ? `<label class="row" style="margin:0">Desde <input type="date" data-rango="${key}Desde" value="${state[key + 'Desde'] || hoy}" style="width:auto"></label>
+        <label class="row" style="margin:0">Hasta <input type="date" data-rango="${key}Hasta" value="${state[key + 'Hasta'] || hoy}" style="width:auto"></label>` : ''}`;
   }
 
   // ---------- Render y eventos ----------
@@ -435,7 +458,12 @@ const App = (() => {
     main.innerHTML = views[view]();
     $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
     bind[view] && bind[view](main);
-    $$('[data-periodo]', main).forEach(s => s.onchange = () => { state[s.dataset.periodo] = s.value; render(); });
+    $$('[data-periodo]', main).forEach(s => s.onchange = () => {
+      state[s.dataset.periodo] = s.value;
+      if (s.value === 'custom') { const hoy = new Date().toISOString().slice(0, 10); state[s.dataset.periodo + 'Desde'] ||= hoy; state[s.dataset.periodo + 'Hasta'] ||= hoy; }
+      render();
+    });
+    $$('[data-rango]', main).forEach(i => i.onchange = () => { state[i.dataset.rango] = i.value; render(); });
     if (focused && $('#' + focused)) { const el = $('#' + focused); el.focus(); try { el.setSelectionRange(caret, caret); } catch {} }
   }
   const onInput = (el, fn) => el && (el.oninput = () => { fn(el.value); render(); });
@@ -455,6 +483,7 @@ const App = (() => {
       $$('[data-linedesc]', root).forEach(b => b.onclick = () => lineDiscount(+b.dataset.linedesc));
       $$('[data-desctipo]', root).forEach(b => b.onclick = () => { cart.descTipo = b.dataset.desctipo; saveCart(); render(); });
       $$('[data-entrega]', root).forEach(b => b.onclick = () => { cart.entrega = b.dataset.entrega; saveCart(); render(); });
+      $$('[data-envpago]', root).forEach(b => b.onclick = () => { cart.envioPago = b.dataset.envpago; saveCart(); render(); });
       const change = (id, key, fn = x => x) => { const el = $('#' + id, root); if (el) el.onchange = () => { cart[key] = fn(el.value); saveCart(); render(); }; };
       change('descValor', 'descValor', num); change('envioCosto', 'envioCosto', int);
       change('empresa', 'empresa'); change('medioPago', 'medioPago'); change('documento', 'documento');
@@ -478,6 +507,7 @@ const App = (() => {
     },
     compras(root) {
       $('#newCompra', root).onclick = () => nuevaCompra();
+      $('#proveedores', root).onclick = () => verProveedores();
       $$('[data-compra]', root).forEach(r => r.onclick = () => verCompra(r.dataset.compra));
     },
     clientes(root) {
@@ -539,7 +569,7 @@ const App = (() => {
   function pickCliente(onPick) {
     const draw = q => DB.all('clientes').filter(c => match([c.nombre, c.rut, c.telefono, c.rrss, c.email].join(' '), q))
       .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).slice(0, 50)
-      .map(c => `<button data-c="${c.id}"><b>${esc(c.nombre)}</b> <span class="muted">${esc([c.rut, c.telefono, c.comuna].filter(Boolean).join(' · '))}</span></button>`).join('')
+      .map(c => `<button data-c="${c.id}"><b>${esc(c.nombre)}</b> <span class="muted">${esc([c.rut, telefonoDe(c), c.comuna].filter(Boolean).join(' · '))}</span></button>`).join('')
       || '<div class="empty">Sin resultados</div>';
     modal('Elegir cliente', `<div class="stack">
       <div class="row"><input class="grow" id="cq" type="search" placeholder="Buscar por nombre, RUT, teléfono o RRSS…"><button class="btn primary" id="cNew">Nuevo</button></div>
@@ -553,27 +583,79 @@ const App = (() => {
   }
 
   function editCliente(id, onSaved) {
-    const c = id ? { ...cliente(id) } : { origen: ORIGENES[0] };
+    const c = id ? { ...cliente(id) } : { origen: ORIGENES[0], telefonoCodigo: '+56' };
     const f = (k, label, extra = '') => `<div><label>${label}</label><input data-f="${k}" value="${esc(c[k] || '')}" ${extra}></div>`;
     const ventas = id ? DB.all('ventas').filter(v => v.clienteId === id).sort((a, b) => b.fecha.localeCompare(a.fecha)) : [];
     modal(id ? 'Editar cliente' : 'Nuevo cliente', `<div class="stack">
-      <div class="grid2">${f('nombre', 'Nombre *')}${f('rut', 'RUT')}${f('telefono', 'Teléfono', 'inputmode="tel"')}${f('email', 'Email', 'type="email"')}
+      <div class="grid2">${f('nombre', 'Nombre *')}${f('rut', 'RUT')}
+        <div><label>Teléfono</label><div class="row" style="flex-wrap:nowrap">
+          <select data-f="telefonoCodigo" style="width:auto;max-width:130px;flex:none">${PAISES.map(([k, n]) => `<option value="${k}" ${(c.telefonoCodigo || '+56') === k ? 'selected' : ''}>${n} ${k}</option>`).join('')}</select>
+          <input data-f="telefono" inputmode="tel" value="${esc(c.telefono || '')}" placeholder="9 1234 5678"></div></div>
+        ${f('email', 'Email', 'type="email"')}
         ${f('rrss', 'Usuario en RRSS (ej: @cliente)')}
         <div><label>¿De dónde viene?</label><select data-f="origen">${ORIGENES.map(o => `<option ${c.origen === o ? 'selected' : ''}>${o}</option>`).join('')}</select></div></div>
-      ${f('direccion', 'Dirección (calle, número, depto)')}
-      <div class="grid2">${f('comuna', 'Comuna')}${f('region', 'Región')}</div>
+      <div style="position:relative"><label>Dirección (calle y número)</label>
+        <input data-f="direccion" id="dirInput" autocomplete="off" value="${esc(c.direccion || '')}" placeholder="Empieza a escribir y elige una sugerencia">
+        <div class="list-pick" id="dirSug" hidden style="position:absolute;left:0;right:0;z-index:5;background:var(--surface)"></div></div>
+      ${f('depto', 'Depto / casa / referencia')}
+      <div class="grid2">${f('comuna', 'Comuna')}<div><label>Región</label><input data-f="region" list="regiones" value="${esc(c.region || '')}"></div></div>
+      <datalist id="regiones">${REGIONES.map(r => `<option value="${esc(r)}">`).join('')}</datalist>
       <div><label>Notas</label><textarea data-f="notas" rows="2">${esc(c.notas || '')}</textarea></div>
       <div class="row"><button class="btn primary" id="cSave">Guardar</button></div>
       ${ventas.length ? `<h3>Compras</h3><table>${ventas.map(v => `<tr><td>${new Date(v.fecha).toLocaleDateString('es-CL')}</td><td>${esc(v.folio)}</td><td class="right num">${clp(v.total)}</td></tr>`).join('')}</table>` : ''}
       </div>`, root => {
+      sugerirDirecciones(root);
       $('#cSave', root).onclick = async () => {
         $$('[data-f]', root).forEach(i => c[i.dataset.f] = i.value.trim());
+        c.telefono = c.telefono.replace(/[^\d ]/g, '').trim();
         if (!c.nombre) return toast('El nombre es obligatorio.');
         const [saved] = await DB.save('clientes', c);
         closeModal(); toast('Cliente guardado.');
         if (onSaved) onSaved(saved.id); else render();
       };
     });
+  }
+
+  // Sugerencias de dirección mientras se escribe (OpenStreetMap, gratis). Al elegir una se completan comuna y región.
+  function regionChilena(texto) {
+    const n = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/^region (de |del )?/, '');
+    const t = n(texto);
+    if (!t) return '';
+    if (t.includes('metropolitana') || t.includes('santiago')) return 'Metropolitana de Santiago';
+    return REGIONES.find(r => t.includes(n(r).split(' ')[0]) && (n(r).split(' ').length === 1 || t.includes(n(r).split(' ').slice(-1)[0]))) || texto;
+  }
+  function sugerirDirecciones(root) {
+    const input = $('#dirInput', root), box = $('#dirSug', root);
+    let timer, ultimas = [];
+    const cerrar = () => { box.hidden = true; };
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      const q = input.value.trim();
+      if (q.length < 5 || !navigator.onLine) return cerrar();
+      timer = setTimeout(async () => {
+        try {
+          const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6&bbox=-76.5,-56.5,-66,-17`);
+          const data = await res.json();
+          ultimas = (data.features || []).map(f => f.properties).filter(p => !p.countrycode || p.countrycode.toUpperCase() === 'CL').map(p => ({
+            calle: [p.street || p.name, p.housenumber].filter(Boolean).join(' '),
+            comuna: p.city || p.county || p.district || '',
+            region: regionChilena(p.state),
+          })).filter(x => x.calle);
+          if (input.value.trim() !== q) return;
+          box.innerHTML = ultimas.map((x, i) => `<button type="button" data-sug="${i}"><b>${esc(x.calle)}</b> <span class="muted">${esc([x.comuna, x.region].filter(Boolean).join(', '))}</span></button>`).join('');
+          box.hidden = !ultimas.length;
+          $$('[data-sug]', box).forEach(b => b.onmousedown = e => {
+            e.preventDefault();
+            const x = ultimas[b.dataset.sug];
+            input.value = x.calle;
+            if (x.comuna) $('[data-f=comuna]', root).value = x.comuna;
+            if (x.region) $('[data-f=region]', root).value = x.region;
+            cerrar();
+          });
+        } catch { cerrar(); }
+      }, 400);
+    });
+    input.addEventListener('blur', () => setTimeout(cerrar, 150));
   }
 
   function editProducto(id) {
@@ -687,6 +769,38 @@ const App = (() => {
       } };
   }
 
+  const proveedoresActivos = () => DB.all('proveedores').sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  function verProveedores() {
+    modal('Proveedores', `<div class="stack">
+      <div class="row"><button class="btn primary" id="pvNew">Nuevo proveedor</button></div>
+      <table>${proveedoresActivos().map(p => `<tr><td><b>${esc(p.nombre)}</b><div class="muted">${esc([p.rut, p.telefono, p.email].filter(Boolean).join(' · '))}</div></td>
+        <td class="right"><button class="btn small" data-pvedit="${p.id}">Editar</button> <button class="btn small danger" data-pvdel="${p.id}">Eliminar</button></td></tr>`).join('')
+        || '<tr><td class="muted">Aún no hay proveedores.</td></tr>'}</table></div>`, root => {
+      $('#pvNew', root).onclick = () => editProveedor(null, verProveedores);
+      $$('[data-pvedit]', root).forEach(b => b.onclick = () => editProveedor(b.dataset.pvedit, verProveedores));
+      $$('[data-pvdel]', root).forEach(b => b.onclick = async () => {
+        const p = DB.get('proveedores', b.dataset.pvdel);
+        if (!confirm(`¿Eliminar a ${p.nombre}? Las compras ya registradas no cambian.`)) return;
+        await DB.save('proveedores', { ...p, eliminado: true });
+        toast('Proveedor eliminado.'); verProveedores();
+      });
+    });
+  }
+  function editProveedor(id, despues) {
+    const p = id ? { ...DB.get('proveedores', id) } : {};
+    const f = (k, label) => `<div><label>${label}</label><input data-pf="${k}" value="${esc(p[k] || '')}"></div>`;
+    modal(id ? 'Editar proveedor' : 'Nuevo proveedor', `<div class="stack"><div class="grid2">${f('nombre', 'Nombre *')}${f('rut', 'RUT')}${f('telefono', 'Teléfono')}${f('email', 'Email')}</div>
+      <div><label>Notas</label><textarea data-pf="notas" rows="2">${esc(p.notas || '')}</textarea></div>
+      <div class="row"><button class="btn primary" id="pfOk">Guardar</button></div></div>`, root => {
+      $('#pfOk', root).onclick = async () => {
+        $$('[data-pf]', root).forEach(i => p[i.dataset.pf] = i.value.trim());
+        if (!p.nombre) return toast('El nombre es obligatorio.');
+        const [saved] = await DB.save('proveedores', p);
+        toast('Proveedor guardado.'); despues(saved);
+      };
+    });
+  }
+
   function nuevaCompra() {
     const compra = { fecha: new Date().toISOString().slice(0, 10), proveedor: '', documento: '', items: [], actualizarCosto: true };
     const draw = () => {
@@ -699,7 +813,9 @@ const App = (() => {
         draw();
       });
       modal('Registrar compra', `<div class="stack">
-        <div class="grid2"><div><label>Proveedor</label><input id="cProv" value="${esc(compra.proveedor)}"></div>
+        <div class="grid2"><div><label>Proveedor</label><select id="cProv"><option value="">Elegir…</option>
+            ${proveedoresActivos().map(p => `<option value="${p.id}" ${compra.proveedorId === p.id ? 'selected' : ''}>${esc(p.nombre)}</option>`).join('')}
+            <option value="__nuevo">+ Nuevo proveedor</option></select></div>
           <div><label>Fecha</label><input id="cFecha" type="date" value="${compra.fecha}"></div>
           <div><label>N° factura / boleta</label><input id="cDoc" value="${esc(compra.documento)}"></div>
           <div><label class="row" style="margin-top:26px"><input type="checkbox" id="cUpd" ${compra.actualizarCosto ? 'checked' : ''}> Actualizar precio costo</label></div></div>
@@ -713,13 +829,19 @@ const App = (() => {
         ${picker.html}
         <div class="row"><button class="btn primary" id="cSave" ${compra.items.length ? '' : 'disabled'}>Guardar compra</button></div></div>`, root => {
         picker.wire(root);
+        $('#cProv', root).onchange = e => {
+          if (e.target.value !== '__nuevo') return;
+          readItems();
+          editProveedor(null, p => { compra.proveedorId = p.id; draw(); });
+        };
         $$('[data-rmit]', root).forEach(b => b.onclick = () => { readItems(); compra.items.splice(b.dataset.rmit, 1); draw(); });
         $('#cSave', root).onclick = guardar;
       });
     };
     const readItems = () => {
       const root = $('#modalBody');
-      compra.proveedor = $('#cProv', root)?.value.trim() ?? compra.proveedor;
+      const pv = $('#cProv', root)?.value;
+      if (pv !== undefined && pv !== '__nuevo') compra.proveedorId = pv;
       compra.fecha = $('#cFecha', root)?.value || compra.fecha;
       compra.documento = $('#cDoc', root)?.value.trim() ?? compra.documento;
       compra.actualizarCosto = $('#cUpd', root)?.checked ?? compra.actualizarCosto;
@@ -731,7 +853,8 @@ const App = (() => {
       if (!items.length) return toast('Agrega al menos un producto.');
       const id = DB.uid();
       const fecha = new Date(compra.fecha + 'T12:00:00').toISOString();
-      const rec = { id, folio: folio('C'), fecha, proveedor: compra.proveedor, documento: compra.documento, usuario: config.usuario || '',
+      const prov = compra.proveedorId ? DB.get('proveedores', compra.proveedorId) : null;
+      const rec = { id, folio: folio('C'), fecha, proveedorId: prov?.id || '', proveedor: prov?.nombre || '', documento: compra.documento, usuario: config.usuario || '',
         items: items.map(i => ({ ...i, nombre: nombreVariante(variante(i.varianteId)), total: i.cantidad * i.costo })),
         total: items.reduce((s, i) => s + i.cantidad * i.costo, 0) };
       await DB.save('compras', rec);
@@ -749,7 +872,16 @@ const App = (() => {
     const c = DB.get('compras', id);
     modal('Compra ' + c.folio, `<div class="stack"><div>${esc(c.proveedor)} · ${new Date(c.fecha).toLocaleDateString('es-CL')} ${c.documento ? '· Doc ' + esc(c.documento) : ''}</div>
       <table>${c.items.map(i => `<tr><td>${i.cantidad} × ${esc(i.nombre)}</td><td class="right num">${clp(i.costo)}</td><td class="right num">${clp(i.total)}</td></tr>`).join('')}
-      <tr><td><b>Total</b></td><td></td><td class="right num"><b>${clp(c.total)}</b></td></tr></table></div>`);
+      <tr><td><b>Total</b></td><td></td><td class="right num"><b>${clp(c.total)}</b></td></tr></table>
+      <div class="row"><button class="btn danger" id="cDel">Eliminar compra</button></div></div>`, root => {
+      $('#cDel', root).onclick = async () => {
+        if (!confirm('¿Eliminar esta compra? Las unidades que sumó se descuentan del stock.')) return;
+        const fecha = new Date().toISOString();
+        await DB.save('compras', { ...c, eliminado: true, eliminadaEn: fecha });
+        await DB.save('movimientos', c.items.map(i => ({ varianteId: i.varianteId, cantidad: -i.cantidad, tipo: 'compra eliminada', refId: c.id, fecha })));
+        computeStock(); closeModal(); render(); toast('Compra eliminada.');
+      };
+    });
   }
 
   function openVenta(id) {
@@ -769,8 +901,8 @@ const App = (() => {
         ${env.costo ? `<tr><td>Envío</td><td class="right num">${clp(env.costo)}</td></tr>` : ''}
         <tr><td><b>Total</b> · ${esc(v.medioPago)}</td><td class="right num"><b>${clp(v.total)}</b></td></tr></table>
       ${docPanel(v)}
-      ${c ? `<div>Cliente: <b>${esc(c.nombre)}</b><div class="muted">${esc([c.direccion, c.comuna, c.telefono].filter(Boolean).join(' · '))}</div></div>` : ''}
-      ${env.tipo === 'despacho' ? `<div class="card stack"><h3>Despacho ${esc(env.empresa)}</h3>
+      ${c ? `<div>Cliente: <b>${esc(c.nombre)}</b><div class="muted">${esc([c.direccion, c.comuna, telefonoDe(c)].filter(Boolean).join(' · '))}</div></div>` : ''}
+      ${env.tipo === 'despacho' ? `<div class="card stack"><h3>Despacho ${esc(env.empresa)}${env.pago ? ' · ' + esc(env.pago) : ''}</h3>
         <div class="grid2"><div><label>Estado</label><select id="eEstado">${ESTADOS_ENVIO.map(s => `<option ${env.estado === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
           <div><label>N° de seguimiento</label><input id="eSeg" value="${esc(env.seguimiento || '')}"></div></div>
         <div class="row"><button class="btn" id="eSave">Guardar despacho</button><button class="btn" id="pLabel">Imprimir etiqueta</button></div></div>` : ''}
@@ -786,9 +918,9 @@ const App = (() => {
       on('#mpGen', async () => { await generarLinkPago(v.id); openVenta(v.id); });
       on('#mpCopy', async () => { try { await navigator.clipboard.writeText(v.pago.link); } catch { $('#mpLink', root).select(); document.execCommand('copy'); } toast('Link copiado.'); });
       on('#mpWa', () => {
-        const tel = (c?.telefono || '').replace(/\D/g, '');
+        const tel = ((c?.telefonoCodigo || '+56') + (c?.telefono || '')).replace(/\D/g, '');
         const texto = `Hola${c ? ' ' + c.nombre.split(' ')[0] : ''}, este es el link para pagar tu pedido ${v.folio} de Insumos Lifting por ${clp(v.total)}: ${v.pago.link}`;
-        window.open(`https://wa.me/${tel.length === 9 ? '56' + tel : tel}?text=${encodeURIComponent(texto)}`, '_blank');
+        window.open(`https://wa.me/${c?.telefono ? tel : ''}?text=${encodeURIComponent(texto)}`, '_blank');
       });
       on('#mpCheck', async () => {
         if (await revisarPagos([v.id])) { closeModal(); openVenta(v.id); } else toast('Todavía no aparece el pago.');

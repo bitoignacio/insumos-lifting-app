@@ -1,9 +1,9 @@
 // Almacenamiento local (IndexedDB). Todo funciona sin conexión; sync.js envía los cambios a Google Sheets.
 const DB = (() => {
   const NAME = 'insumos-lifting';
-  const VERSION = 1;
+  const VERSION = 2;
   // Tablas de negocio: se sincronizan con la planilla.
-  const TABLES = ['productos', 'variantes', 'clientes', 'ventas', 'compras', 'movimientos'];
+  const TABLES = ['productos', 'variantes', 'clientes', 'ventas', 'compras', 'movimientos', 'proveedores'];
   let db;
   const state = {};
   TABLES.forEach(t => { state[t] = new Map(); });

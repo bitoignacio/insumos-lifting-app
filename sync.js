@@ -30,8 +30,13 @@ const Sync = (() => {
     return data;
   }
 
+  // Tablas que necesitan la versión 2 del Apps Script; con una versión anterior quedan en cola hasta que se actualice.
+  const TABLAS_V2 = ['proveedores'];
+  let versionScript = 0;
   async function push() {
-    const ops = (await DB.outbox()).sort((a, b) => a.ts.localeCompare(b.ts));
+    if (versionScript < 2) versionScript = (await call({ action: 'ping' })).version || 1;
+    const ops = (await DB.outbox()).sort((a, b) => a.ts.localeCompare(b.ts))
+      .filter(o => versionScript >= 2 || !TABLAS_V2.includes(o.table));
     status.pending = ops.length;
     for (let i = 0; i < ops.length; i += 100) {
       const batch = ops.slice(i, i + 100);

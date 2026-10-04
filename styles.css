@@ -72,7 +72,7 @@ input[type=checkbox] { width: auto; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .icon { border: 0; background: transparent; cursor: pointer; font-size: 16px; padding: 4px 8px; color: var(--muted); }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-.seg button { border: 0; background: transparent; padding: 8px 12px; cursor: pointer; }
+.seg button { border: 0; background: transparent; padding: 8px 12px; cursor: pointer; white-space: nowrap; }
 .seg button.on { background: var(--brand); color: var(--brand-ink); font-weight: 600; }
 .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .78rem; background: var(--brand-soft); color: var(--brand); }
 .pill.low { background: #fdecea; color: var(--bad); }
