@@ -1,5 +1,5 @@
 // Guarda la app en el dispositivo para que abra sin internet.
-const CACHE = 'insumos-lifting-v5';
+const CACHE = 'insumos-lifting-v6';
 const FILES = ['./', 'index.html', 'styles.css', 'db.js', 'sync.js', 'print.js', 'app.js', 'manifest.webmanifest', 'icon.svg'];
 
 self.addEventListener('install', e => {
@@ -15,7 +15,7 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
   e.respondWith(
-    fetch(e.request).then(res => {
+    fetch(e.request.url, { cache: 'no-cache' }).then(res => {
       const copy = res.clone();
       caches.open(CACHE).then(c => c.put(e.request, copy));
       return res;

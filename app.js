@@ -1122,7 +1122,16 @@ const App = (() => {
     });
     render();
     Sync.run();
-    if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+      // Busca versiones nuevas al abrir o volver a la app y recarga sola cuando hay una (el carrito queda guardado).
+      const habiaVersion = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.register('sw.js').then(reg => {
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+      }).catch(() => {});
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (habiaVersion && $('#modal')?.hidden !== false) location.reload();
+      });
+    }
   }
 
   return { init, revisarPagos, refresh() { computeStock(); if (!document.activeElement.matches('input,textarea')) render(); }, config };
