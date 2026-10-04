@@ -672,7 +672,7 @@ const App = (() => {
       <datalist id="regiones">${REGIONES.map(r => `<option value="${esc(r)}">`).join('')}</datalist>
       <div class="grid2">${f('razonSocial', 'Razón social (para factura)')}${f('rutFactura', 'RUT de facturación')}${f('giro', 'Giro')}</div>
       <div><label>Notas</label><textarea data-f="notas" rows="2">${esc(c.notas || '')}</textarea></div>
-      <div class="row"><button class="btn primary" id="cSave">Guardar</button>${id ? '<button class="btn danger" id="cDel">Eliminar cliente</button>' : ''}</div>
+      <div class="row acciones"><button class="btn primary" id="cSave">Guardar</button>${id ? '<button class="btn danger" id="cDel">Eliminar cliente</button>' : ''}</div>
       ${ventas.length ? `<h3>Compras</h3><table>${ventas.map(v => `<tr><td>${new Date(v.fecha).toLocaleDateString('es-CL')}</td><td>${esc(v.folio)}</td><td class="right num">${clp(v.total)}</td></tr>`).join('')}</table>` : ''}
       </div>`, root => {
       sugerirDirecciones(root);
