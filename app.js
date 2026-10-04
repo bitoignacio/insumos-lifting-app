@@ -93,6 +93,8 @@ const App = (() => {
     const line = cart.lines.find(l => l.varianteId === varianteId);
     if (line) line.cantidad++;
     else cart.lines.push({ varianteId, cantidad: 1, precio: v.precio || 0, descTipo: '%', descValor: 0 });
+    // En el celular se limpia la búsqueda para volver a ver la venta.
+    if (matchMedia('(max-width: 900px)').matches) search = '';
     saveCart();
     render();
   }
@@ -195,9 +197,10 @@ const App = (() => {
       const cli = cliente(cart.clienteId);
       const prods = productosActivos().filter(p => match(p.nombre + ' ' + (p.categoria || '') + ' ' + (p.sku || '') + ' ' +
         variantesDe(p.id).map(v => v.nombre + ' ' + (v.sku || '')).join(' '), search));
-      return `<div class="pos">
+      return `<div class="pos ${search.trim() ? 'buscando' : ''}">
         <section>
           <input id="search" type="search" placeholder="Buscar producto, color, medida o código…" value="${esc(search)}" autocomplete="off">
+          <div class="muted solo-movil">Escribe el nombre del producto para agregarlo a la venta.</div>
           <div class="products">
             ${prods.map(p => {
               const vs = variantesDe(p.id);

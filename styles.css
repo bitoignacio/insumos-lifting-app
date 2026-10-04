@@ -128,3 +128,9 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--brand-soft);
 }
 .cart-foot > * + * { margin-top: 12px; }
 @media (max-width: 900px) { .cart { position: static; } }
+/* En el celular los productos solo aparecen al buscar. */
+.solo-movil { display: none; margin-top: 8px; }
+@media (max-width: 900px) {
+  .pos:not(.buscando) .products { display: none; }
+  .pos:not(.buscando) .solo-movil { display: block; }
+}
