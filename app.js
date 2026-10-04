@@ -66,7 +66,7 @@ const App = (() => {
   // ---------- Carrito ----------
   function emptyCart() {
     return { lines: [], descTipo: '%', descValor: 0, entrega: 'retiro', empresa: EMPRESAS_ENVIO[0], envioPago: 'Pagado', envioCosto: 0,
-      clienteId: null, medioPago: MEDIOS_PAGO[0], documento: DOCUMENTOS[0], factura: { razonSocial: '', rut: '', giro: '' }, nota: '' };
+      clienteId: null, medioPago: MEDIOS_PAGO[0], documento: DOCUMENTOS[0], factura: { razonSocial: '', rut: '', giro: '' }, nota: '', prueba: false };
   }
   function loadCart() { try { return { ...emptyCart(), ...JSON.parse(localStorage.getItem('carrito') || '{}') }; } catch { return emptyCart(); } }
   function saveCart() { try { localStorage.setItem('carrito', JSON.stringify(cart)); } catch {} }
@@ -130,6 +130,8 @@ const App = (() => {
         : { tipo: 'retiro' },
       // Con MercadoPago la venta queda pendiente hasta que el cliente pague; el stock queda reservado.
       estado: cart.medioPago === 'MercadoPago' ? 'pendiente' : 'completada', nota: cart.nota || '',
+      // Las ventas de prueba no cuentan en el Resumen y se borran desde Ajustes.
+      ...(cart.prueba ? { prueba: true } : {}),
       pago: cart.medioPago === 'MercadoPago' ? { estado: 'pendiente', link: '' } : { estado: 'pagado' },
     };
     await DB.save('ventas', venta);
@@ -263,7 +265,8 @@ const App = (() => {
           <div class="row">
             <button class="btn" id="clearCart" ${cart.lines.length ? '' : 'disabled'}>Vaciar</button>
             <button class="btn primary grow" id="checkout" ${cart.lines.length ? '' : 'disabled'}>${cart.medioPago === 'MercadoPago' ? 'Generar link de pago' : 'Registrar venta'}</button>
-          </div></div>
+          </div>
+          <label class="row" style="margin:0;justify-content:flex-end"><input type="checkbox" id="prueba" ${cart.prueba ? 'checked' : ''}> Venta de prueba</label></div>
         </aside>
       </div>`;
     },
@@ -276,7 +279,7 @@ const App = (() => {
         .filter(v => !state.docEstados || (state.docEstados.includes(v.documento?.estado) && v.estado !== 'anulada'))
         .filter(v => !state.docTipos || state.docTipos.includes(v.documento?.tipo || 'Sin documento'))
         .sort((a, b) => b.fecha.localeCompare(a.fecha));
-      const total = list.filter(v => v.estado === 'completada').reduce((s, v) => s + v.total, 0);
+      const total = list.filter(v => v.estado === 'completada' && !v.prueba).reduce((s, v) => s + v.total, 0);
       const nPend = list.filter(v => v.estado === 'pendiente').length;
       return `<div class="card stack">
         <div class="row"><h2 class="grow">Ventas</h2>${periodoSelect('ventasPeriodo', periodo)}</div>
@@ -350,7 +353,7 @@ const App = (() => {
 
     clientes() {
       const q = state.cliQ || '';
-      const ventas = DB.all('ventas').filter(v => v.estado === 'completada');
+      const ventas = DB.all('ventas').filter(v => v.estado === 'completada' && !v.prueba);
       const list = DB.all('clientes').filter(c => match([c.nombre, c.rut, c.telefono, c.email, c.rrss, c.comuna].join(' '), q))
         .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
       return `<div class="card stack">
@@ -371,7 +374,7 @@ const App = (() => {
     resumen() {
       const periodo = state.resPeriodo || '30';
       const rango = periodoRango('resPeriodo');
-      const ventas = DB.all('ventas').filter(v => v.estado === 'completada' && enRango(v.fecha, rango));
+      const ventas = DB.all('ventas').filter(v => v.estado === 'completada' && !v.prueba && enRango(v.fecha, rango));
       let neto = 0, costo = 0, envios = 0;
       const porPago = {}, porProd = {}, porOrigen = {};
       for (const v of ventas) {
@@ -458,6 +461,7 @@ const App = (() => {
       <div class="row"><button class="btn small" id="docSave">Guardar</button></div></div>`;
   }
   function estadoPill(v) {
+    if (v.prueba) return '<span class="pill">Prueba</span>' + (v.estado === 'anulada' ? ' <span class="pill low">Anulada</span>' : '');
     if (v.estado === 'anulada') return '<span class="pill low">Anulada</span>';
     if (v.estado === 'pendiente') return '<span class="pill warn">Pago pendiente</span>';
     return '';
@@ -545,6 +549,7 @@ const App = (() => {
       const cc = $('#clearCliente', root); if (cc) cc.onclick = () => { cart.clienteId = null; saveCart(); render(); };
       $('#clearCart', root).onclick = () => { if (confirm('¿Vaciar la venta actual?')) { cart = emptyCart(); saveCart(); render(); } };
       $('#checkout', root).onclick = registrarVenta;
+      $('#prueba', root).onchange = e => { cart.prueba = e.target.checked; saveCart(); };
     },
     ventas(root) {
       onInput($('#ventasQ', root), v => state.ventasQ = v);
@@ -957,15 +962,16 @@ const App = (() => {
   // Marca como eliminados los registros elegidos (así también se borran en la planilla y en los otros equipos).
   function borrarPruebas() {
     const opciones = [
-      ['ventas', 'Ventas', DB.all('ventas').length],
+      ['prueba', 'Solo ventas de prueba', DB.all('ventas').filter(v => v.prueba).length],
+      ['ventas', 'Todas las ventas', DB.all('ventas').length],
       ['compras', 'Compras', DB.all('compras').length],
       ['ajustes', 'Ajustes y conteos de stock', DB.all('movimientos').filter(m => m.tipo === 'ajuste').length],
       ['clientes', 'Clientes', DB.all('clientes').length],
       ['proveedores', 'Proveedores', DB.all('proveedores').length],
     ];
     modal('Borrar datos de prueba', `<div class="stack">
-      ${opciones.map(([k, n, c]) => `<label class="row" style="margin:0;color:var(--ink)"><input type="checkbox" data-borrar="${k}" ${['ventas', 'compras', 'ajustes'].includes(k) ? 'checked' : ''}> ${n} <span class="muted">(${c})</span></label>`).join('')}
-      <p class="muted">Al borrar ventas, compras y ajustes, el stock vuelve a 0 y el Resumen queda en blanco. Después puedes cargar el stock real con Inventario > Conteo de inventario.</p>
+      ${opciones.map(([k, n, c]) => `<label class="row" style="margin:0;color:var(--ink)"><input type="checkbox" data-borrar="${k}" ${k === 'prueba' ? 'checked' : ''}> ${n} <span class="muted">(${c})</span></label>`).join('')}
+      <p class="muted">Al borrar ventas de prueba, su stock vuelve al inventario. Al borrar todas las ventas, compras y ajustes, el stock vuelve a 0 y el Resumen queda en blanco. Después puedes cargar el stock real con Inventario > Conteo de inventario.</p>
       <div><label>Para confirmar escribe BORRAR</label><input id="resetOk" autocomplete="off"></div>
       <div class="row"><button class="btn danger" id="resetGo">Borrar</button></div></div>`, root => {
       $('#resetGo', root).onclick = async () => {
@@ -979,6 +985,11 @@ const App = (() => {
           const list = DB.all(t);
           if (t === 'ventas' || t === 'compras') list.forEach(r => refs.add(r.id));
           if (list.length) await DB.save(t, marcar(list));
+        }
+        if (sel.includes('prueba') && !sel.includes('ventas')) {
+          const list = DB.all('ventas').filter(v => v.prueba);
+          list.forEach(r => refs.add(r.id));
+          if (list.length) await DB.save('ventas', marcar(list));
         }
         const movs = DB.all('movimientos').filter(m => (m.refId && refs.has(m.refId)) || (sel.includes('ajustes') && m.tipo === 'ajuste'));
         if (movs.length) await DB.save('movimientos', marcar(movs));

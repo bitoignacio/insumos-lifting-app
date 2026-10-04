@@ -173,7 +173,7 @@ function actualizarDetalleVentas(ventas) {
   const clientes = {};
   leerTabla('clientes').forEach(c => { clientes[c.id] = c; });
   const filas = [], filasDesp = [], filasFact = [];
-  ventas.filter(v => v.estado === 'completada' && !v.eliminado).forEach(v => {
+  ventas.filter(v => v.estado === 'completada' && !v.eliminado && !v.prueba).forEach(v => {
     (v.items || []).forEach(it => {
       const neto = it.precio * it.cantidad - it.descuento;
       filas.push([v.id, v.folio, v.fecha, it.nombre, it.sku, it.cantidad, it.precio, it.descuento, neto, it.costo * it.cantidad, neto - it.costo * it.cantidad]);

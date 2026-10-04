@@ -36,6 +36,7 @@
 4. Para el stock: **Inventario > Conteo de inventario**, anota lo contado de cada producto y guarda.
 
 ## Borrar datos de prueba
+Al vender, marca **Venta de prueba** (debajo de Registrar venta). Esa venta no cuenta en el Resumen ni en las hojas de detalle, y se borra con la opción **Solo ventas de prueba**.
 En **Ajustes > Borrar datos de prueba** eliges qué borrar (ventas, compras, ajustes de stock, clientes, proveedores), escribes BORRAR y confirmas. Se borra en la app, en los otros equipos y en la planilla (las filas quedan marcadas "sí" en la columna eliminado). Los productos no se tocan.
 
 ## Instalar en el celular
