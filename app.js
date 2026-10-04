@@ -273,7 +273,7 @@ const App = (() => {
       const rango = periodoRango('ventasPeriodo');
       const list = DB.all('ventas').filter(v => enRango(v.fecha, rango))
         .filter(v => match([v.folio, cliente(v.clienteId)?.nombre, v.documento?.numero, v.documento?.razonSocial, v.documento?.rut, ...v.items.map(i => i.nombre)].join(' '), state.ventasQ || ''))
-        .filter(v => !state.porEmitir || (v.documento?.estado === 'por emitir' && v.estado !== 'anulada'))
+        .filter(v => !state.docEstados || (state.docEstados.includes(v.documento?.estado) && v.estado !== 'anulada'))
         .filter(v => !state.docTipos || state.docTipos.includes(v.documento?.tipo || 'Sin documento'))
         .sort((a, b) => b.fecha.localeCompare(a.fecha));
       const total = list.filter(v => v.estado === 'completada').reduce((s, v) => s + v.total, 0);
@@ -281,7 +281,8 @@ const App = (() => {
       return `<div class="card stack">
         <div class="row"><h2 class="grow">Ventas</h2>${periodoSelect('ventasPeriodo', periodo)}</div>
         <div class="row"><input class="grow" id="ventasQ" type="search" placeholder="Buscar por folio, cliente, producto o N° de boleta…" value="${esc(state.ventasQ || '')}">
-          <label class="row" style="margin:0"><input type="checkbox" id="porEmitir" ${state.porEmitir ? 'checked' : ''}> Solo boletas/facturas por emitir</label></div>
+</div>
+        <div class="row"><span class="muted">Boletas/facturas:</span>${[['por emitir', 'Por emitir'], ['emitida', 'Emitidas']].map(([k, n]) => `<label class="row" style="margin:0"><input type="checkbox" data-docestado="${k}" ${state.docEstados?.includes(k) ? 'checked' : ''}> ${n}</label>`).join('')}</div>
         <div class="row"><span class="muted">Documento:</span>${DOCUMENTOS.map(t => `<label class="row" style="margin:0"><input type="checkbox" data-doctipo="${t}" ${!state.docTipos || state.docTipos.includes(t) ? 'checked' : ''}> ${t}</label>`).join('')}</div>
         <div class="muted">${list.length} venta(s) · ${clp(total)} cobrado${nPend ? ` · <b>${nPend} pendiente(s) de pago</b>` : ''}</div>
         <div class="table-wrap"><table>
@@ -543,7 +544,10 @@ const App = (() => {
     },
     ventas(root) {
       onInput($('#ventasQ', root), v => state.ventasQ = v);
-      $('#porEmitir', root).onchange = e => { state.porEmitir = e.target.checked; render(); };
+      $$('[data-docestado]', root).forEach(i => i.onchange = () => {
+        const sel = $$('[data-docestado]', root).filter(x => x.checked).map(x => x.dataset.docestado);
+        state.docEstados = sel.length ? sel : null; render();
+      });
       $$('[data-doctipo]', root).forEach(i => i.onchange = () => {
         const sel = $$('[data-doctipo]', root).filter(x => x.checked).map(x => x.dataset.doctipo);
         state.docTipos = sel.length === DOCUMENTOS.length ? null : sel; render();

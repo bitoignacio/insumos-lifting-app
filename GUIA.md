@@ -2,7 +2,7 @@
 
 ## Qué hace hoy
 - **Vender** (pantalla principal): buscar producto, elegir opción (color, tamaño o medida), descuento por producto o a la venta, retiro o despacho (Starken / Blue Express con envío pagado o por pagar, o Pyme), cliente, medio de pago (Efectivo, Transferencia, MercadoPago) y documento (con Factura pide razón social, RUT y giro). El stock se descuenta solo.
-- **Ventas**: historial, boleta/factura como registro interno (se emite a mano en el SII y se anota el N°; filtros "por emitir" y por tipo: boleta, factura, sin documento), comprobante interno, etiqueta de despacho 10 x 15 cm, estado del envío y N° de seguimiento, anular venta (devuelve el stock).
+- **Ventas**: historial, boleta/factura como registro interno (se emite a mano en el SII y se anota el N°; filtros por estado (por emitir / emitidas) y por tipo: boleta, factura, sin documento), comprobante interno, etiqueta de despacho 10 x 15 cm, estado del envío y N° de seguimiento, anular venta (devuelve el stock).
 - **Inventario**: productos con opciones, alertas de stock bajo, **conteo de inventario** para revisar todo el stock de una vez, ajustes con motivo, valor del inventario.
 - **Compras**: lista de proveedores (agregar, editar, eliminar), registra compras que suman stock y actualizan el costo, y permite eliminar una compra (descuenta el stock).
 - **Clientes**: nombre, RUT, teléfono con código de país (+56 por defecto), email, RRSS, origen (RRSS / Web / WhatsApp), dirección con sugerencias que completan comuna y región, datos de facturación, y opción de eliminar cliente (sus ventas pasadas se mantienen).
