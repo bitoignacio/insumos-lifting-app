@@ -23,8 +23,9 @@ const HOJAS = {
   movimientos: { nombre: 'Movimientos', columnas: ['id', 'varianteId', 'cantidad', 'tipo', 'refId', 'fecha', 'nota'] },
   proveedores: { nombre: 'Proveedores', columnas: ['id', 'nombre', 'rut', 'telefono', 'email', 'notas'] },
 };
-const VERSION = 2;
+const VERSION = 3;
 const COLUMNAS_DESPACHOS = ['ventaId', 'folio', 'fecha', 'empresa', 'costo', 'estado', 'seguimiento', 'cliente', 'direccion', 'comuna', 'telefono', 'pago'];
+const COLUMNAS_FACTURAS = ['ventaId', 'folio', 'fecha', 'razonSocial', 'rut', 'giro', 'total', 'numero', 'estado'];
 const FIJAS = ['actualizado', 'eliminado', 'datos'];
 const HOJA_CARGA = 'Carga de productos';
 
@@ -163,18 +164,22 @@ function actualizarDetalleVentas(ventas) {
   const det = hojaSimple('Detalle ventas', ['ventaId', 'folio', 'fecha', 'producto', 'sku', 'cantidad', 'precio', 'descuento', 'total', 'costo', 'ganancia']);
   const desp = hojaSimple('Despachos', COLUMNAS_DESPACHOS);
   desp.getRange(1, 1, 1, COLUMNAS_DESPACHOS.length).setValues([COLUMNAS_DESPACHOS]).setFontWeight('bold');
+  const fact = hojaSimple('Facturas', COLUMNAS_FACTURAS);
   const ids = {};
   ventas.forEach(v => { ids[v.id] = true; });
   borrarFilas(det, ids);
   borrarFilas(desp, ids);
+  borrarFilas(fact, ids);
   const clientes = {};
   leerTabla('clientes').forEach(c => { clientes[c.id] = c; });
-  const filas = [], filasDesp = [];
+  const filas = [], filasDesp = [], filasFact = [];
   ventas.filter(v => v.estado === 'completada').forEach(v => {
     (v.items || []).forEach(it => {
       const neto = it.precio * it.cantidad - it.descuento;
       filas.push([v.id, v.folio, v.fecha, it.nombre, it.sku, it.cantidad, it.precio, it.descuento, neto, it.costo * it.cantidad, neto - it.costo * it.cantidad]);
     });
+    const d = v.documento || {};
+    if (d.tipo === 'Factura') filasFact.push([v.id, v.folio, v.fecha, d.razonSocial || '', d.rut || '', d.giro || '', v.total, d.numero || '', d.estado || '']);
     if (v.envio && v.envio.tipo === 'despacho') {
       const c = clientes[v.clienteId] || {};
       filasDesp.push([v.id, v.folio, v.fecha, v.envio.empresa, v.envio.costo, v.envio.estado, v.envio.seguimiento || '', c.nombre || '',
@@ -182,6 +187,7 @@ function actualizarDetalleVentas(ventas) {
     }
   });
   if (filas.length) det.getRange(det.getLastRow() + 1, 1, filas.length, filas[0].length).setValues(filas);
+  if (filasFact.length) fact.getRange(fact.getLastRow() + 1, 1, filasFact.length, filasFact[0].length).setValues(filasFact);
   if (filasDesp.length) desp.getRange(desp.getLastRow() + 1, 1, filasDesp.length, filasDesp[0].length).setValues(filasDesp);
 }
 

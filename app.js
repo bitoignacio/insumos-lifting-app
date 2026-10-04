@@ -41,6 +41,20 @@ const App = (() => {
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   const cliente = id => id ? DB.get('clientes', id) : null;
   const telefonoDe = c => c && c.telefono ? `${c.telefonoCodigo || '+56'} ${c.telefono}` : '';
+  // RUT chileno: revisa el dígito verificador y lo muestra como 12.345.678-9.
+  const rutLimpio = r => String(r || '').replace(/[^0-9kK]/g, '').toUpperCase();
+  function rutValido(r) {
+    const s = rutLimpio(r);
+    if (s.length < 2 || !/^\d+$/.test(s.slice(0, -1))) return false;
+    let suma = 0, m = 2;
+    for (let i = s.length - 2; i >= 0; i--) { suma += +s[i] * m; m = m === 7 ? 2 : m + 1; }
+    const d = 11 - (suma % 11);
+    return s.slice(-1) === (d === 11 ? '0' : d === 10 ? 'K' : String(d));
+  }
+  function rutFormato(r) {
+    const s = rutLimpio(r);
+    return s.length < 2 ? (r || '') : s.slice(0, -1).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '-' + s.slice(-1);
+  }
   function folio(prefix) {
     const d = new Date();
     const ymd = String(d.getFullYear()).slice(2) + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
@@ -52,7 +66,7 @@ const App = (() => {
   // ---------- Carrito ----------
   function emptyCart() {
     return { lines: [], descTipo: '%', descValor: 0, entrega: 'retiro', empresa: EMPRESAS_ENVIO[0], envioPago: 'Pagado', envioCosto: 0,
-      clienteId: null, medioPago: MEDIOS_PAGO[0], documento: DOCUMENTOS[0], nota: '' };
+      clienteId: null, medioPago: MEDIOS_PAGO[0], documento: DOCUMENTOS[0], factura: { razonSocial: '', rut: '', giro: '' }, nota: '' };
   }
   function loadCart() { try { return { ...emptyCart(), ...JSON.parse(localStorage.getItem('carrito') || '{}') }; } catch { return emptyCart(); } }
   function saveCart() { try { localStorage.setItem('carrito', JSON.stringify(cart)); } catch {} }
@@ -66,6 +80,12 @@ const App = (() => {
     const descuento = cart.descTipo === '%' ? Math.round(subtotal * (num(cart.descValor) / 100)) : Math.min(subtotal, int(cart.descValor));
     const envio = cart.entrega === 'despacho' && !envioPorPagar() ? int(cart.envioCosto) : 0;
     return { subtotal, descuento, envio, total: subtotal - descuento + envio };
+  }
+  // Al elegir Factura con un cliente, trae los datos de facturación que se usaron antes.
+  function prellenarFactura() {
+    const c = cliente(cart.clienteId), f = cart.factura || (cart.factura = { razonSocial: '', rut: '', giro: '' });
+    if (cart.documento !== 'Factura' || !c || f.razonSocial || f.rut) return;
+    cart.factura = { razonSocial: c.razonSocial || '', rut: c.rutFactura || c.rut || '', giro: c.giro || '' };
   }
   const envioPorPagar = () => CON_PAGO_ENVIO.includes(cart.empresa) && cart.envioPago === 'Por pagar';
   function addToCart(varianteId) {
@@ -81,6 +101,11 @@ const App = (() => {
     const t = cartTotals();
     if (!cart.lines.length) return toast('Agrega productos a la venta.');
     if (cart.entrega === 'despacho' && !cart.clienteId) return toast('Para despacho elige o crea un cliente.');
+    const fac = cart.factura || {};
+    if (cart.documento === 'Factura') {
+      if (!(fac.razonSocial || '').trim()) return toast('Para factura ingresa la razón social.');
+      if (!rutValido(fac.rut)) return toast('Para factura ingresa un RUT válido.');
+    }
     const faltan = cart.lines.filter(l => stockOf(l.varianteId) < l.cantidad);
     if (faltan.length && !confirm('Hay productos sin stock suficiente:\n' + faltan.map(l => '• ' + nombreVariante(variante(l.varianteId))).join('\n') + '\n\n¿Registrar la venta igual?')) return;
 
@@ -98,7 +123,8 @@ const App = (() => {
       id, folio: folio('V'), fecha, usuario: config.usuario || '', clienteId: cart.clienteId,
       items, subtotal: t.subtotal, descuento: t.descuento, total: t.total, medioPago: cart.medioPago,
       // Solo informativo: la boleta o factura se emite a mano en el SII y aquí se anota el número.
-      documento: { tipo: cart.documento, estado: cart.documento === 'Sin documento' ? 'no aplica' : 'por emitir', numero: '' },
+      documento: { tipo: cart.documento, estado: cart.documento === 'Sin documento' ? 'no aplica' : 'por emitir', numero: '',
+        ...(cart.documento === 'Factura' ? { razonSocial: fac.razonSocial.trim(), rut: rutFormato(fac.rut), giro: (fac.giro || '').trim() } : {}) },
       envio: cart.entrega === 'despacho'
         ? { tipo: 'despacho', empresa: cart.empresa, pago: CON_PAGO_ENVIO.includes(cart.empresa) ? cart.envioPago : '', costo: t.envio, estado: ESTADOS_ENVIO[0], seguimiento: '' }
         : { tipo: 'retiro' },
@@ -107,6 +133,10 @@ const App = (() => {
       pago: cart.medioPago === 'MercadoPago' ? { estado: 'pendiente', link: '' } : { estado: 'pagado' },
     };
     await DB.save('ventas', venta);
+    // Guarda los datos de facturación en el cliente para la próxima vez.
+    const cf = cliente(venta.clienteId), d = venta.documento;
+    if (cf && d.tipo === 'Factura' && (cf.razonSocial !== d.razonSocial || cf.rutFactura !== d.rut || (cf.giro || '') !== d.giro))
+      await DB.save('clientes', { ...cf, razonSocial: d.razonSocial, rutFactura: d.rut, giro: d.giro });
     await DB.save('movimientos', items.map(it => ({ varianteId: it.varianteId, cantidad: -it.cantidad, tipo: 'venta', refId: id, fecha })));
     cart = emptyCart();
     saveCart();
@@ -220,6 +250,10 @@ const App = (() => {
             <div><label>Medio de pago</label><select id="medioPago">${MEDIOS_PAGO.map(m => `<option ${cart.medioPago === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
             <div><label>Documento (se emite en el SII)</label><select id="documento">${DOCUMENTOS.map(m => `<option ${cart.documento === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
           </div>
+          ${cart.documento === 'Factura' ? `<div class="stack"><b>Datos de la factura</b>
+            <div class="grid2"><div><label>Razón social *</label><input id="facRazon" value="${esc(cart.factura?.razonSocial || '')}"></div>
+              <div><label>RUT *</label><input id="facRut" value="${esc(cart.factura?.rut || '')}" placeholder="12.345.678-9"></div></div>
+            <div><label>Giro (opcional)</label><input id="facGiro" value="${esc(cart.factura?.giro || '')}"></div></div>` : ''}
           <div class="totals num">
             <div><span>Subtotal</span><span>${clp(t.subtotal)}</span></div>
             ${t.descuento ? `<div><span>Descuento</span><span>-${clp(t.descuento)}</span></div>` : ''}
@@ -238,8 +272,9 @@ const App = (() => {
       const periodo = state.ventasPeriodo || '7';
       const rango = periodoRango('ventasPeriodo');
       const list = DB.all('ventas').filter(v => enRango(v.fecha, rango))
-        .filter(v => match(v.folio + ' ' + (cliente(v.clienteId)?.nombre || '') + ' ' + (v.documento?.numero || '') + ' ' + v.items.map(i => i.nombre).join(' '), state.ventasQ || ''))
+        .filter(v => match([v.folio, cliente(v.clienteId)?.nombre, v.documento?.numero, v.documento?.razonSocial, v.documento?.rut, ...v.items.map(i => i.nombre)].join(' '), state.ventasQ || ''))
         .filter(v => !state.porEmitir || (v.documento?.estado === 'por emitir' && v.estado !== 'anulada'))
+        .filter(v => !state.docTipos || state.docTipos.includes(v.documento?.tipo || 'Sin documento'))
         .sort((a, b) => b.fecha.localeCompare(a.fecha));
       const total = list.filter(v => v.estado === 'completada').reduce((s, v) => s + v.total, 0);
       const nPend = list.filter(v => v.estado === 'pendiente').length;
@@ -247,6 +282,7 @@ const App = (() => {
         <div class="row"><h2 class="grow">Ventas</h2>${periodoSelect('ventasPeriodo', periodo)}</div>
         <div class="row"><input class="grow" id="ventasQ" type="search" placeholder="Buscar por folio, cliente, producto o N° de boleta…" value="${esc(state.ventasQ || '')}">
           <label class="row" style="margin:0"><input type="checkbox" id="porEmitir" ${state.porEmitir ? 'checked' : ''}> Solo boletas/facturas por emitir</label></div>
+        <div class="row"><span class="muted">Documento:</span>${DOCUMENTOS.map(t => `<label class="row" style="margin:0"><input type="checkbox" data-doctipo="${t}" ${!state.docTipos || state.docTipos.includes(t) ? 'checked' : ''}> ${t}</label>`).join('')}</div>
         <div class="muted">${list.length} venta(s) · ${clp(total)} cobrado${nPend ? ` · <b>${nPend} pendiente(s) de pago</b>` : ''}</div>
         <div class="table-wrap"><table>
           <tr><th>Fecha</th><th>Folio</th><th>Cliente</th><th>Entrega</th><th>Pago</th><th>Documento</th><th class="right">Total</th></tr>
@@ -256,7 +292,7 @@ const App = (() => {
             <td>${esc(cliente(v.clienteId)?.nombre || '—')}</td>
             <td>${v.envio?.tipo === 'despacho' ? `${esc(v.envio.empresa)}${v.envio.pago ? ' · ' + esc(v.envio.pago) : ''} <span class="pill ${v.envio.estado === 'Entregado' ? 'ok' : v.envio.estado === 'Enviado' ? '' : 'warn'}">${esc(v.envio.estado)}</span>` : 'Retiro'}</td>
             <td>${esc(v.medioPago)}</td>
-            <td>${esc(v.documento?.tipo || '')} ${v.documento?.estado === 'por emitir' && v.estado !== 'anulada' ? '<span class="pill warn">Por emitir</span>' : esc(v.documento?.numero ? 'N° ' + v.documento.numero : '')}</td>
+            <td>${esc(v.documento?.tipo || '')} ${v.documento?.estado === 'por emitir' && v.estado !== 'anulada' ? '<span class="pill warn">Por emitir</span>' : esc(v.documento?.numero ? 'N° ' + v.documento.numero : '')}${v.documento?.razonSocial ? `<div class="muted">${esc(v.documento.razonSocial)} · ${esc(v.documento.rut || '')}</div>` : ''}</td>
             <td class="right num">${clp(v.total)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No hay ventas en este periodo.</td></tr>'}
         </table></div></div>`;
     },
@@ -410,6 +446,10 @@ const App = (() => {
     return `<div class="card stack"><div class="row"><h3 class="grow" style="margin:0">Boleta / factura (registro interno)</h3><span class="pill ${cls}">${esc(d.estado || '')}</span></div>
       <div class="grid2"><div><label>Tipo</label><select id="docTipo">${DOCUMENTOS.map(t => `<option ${d.tipo === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
         <div><label>N° emitido en el SII</label><input id="docNum" value="${esc(d.numero || '')}" placeholder="Ej: 1234"></div></div>
+      <div id="docFac" class="grid2" ${d.tipo === 'Factura' ? '' : 'hidden'}>
+        <div><label>Razón social *</label><input id="docRazon" value="${esc(d.razonSocial || '')}"></div>
+        <div><label>RUT *</label><input id="docRut" value="${esc(d.rut || '')}" placeholder="12.345.678-9"></div>
+        <div><label>Giro (opcional)</label><input id="docGiro" value="${esc(d.giro || '')}"></div></div>
       <div class="row"><button class="btn small" id="docSave">Guardar</button></div></div>`;
   }
   function estadoPill(v) {
@@ -486,8 +526,17 @@ const App = (() => {
       $$('[data-envpago]', root).forEach(b => b.onclick = () => { cart.envioPago = b.dataset.envpago; saveCart(); render(); });
       const change = (id, key, fn = x => x) => { const el = $('#' + id, root); if (el) el.onchange = () => { cart[key] = fn(el.value); saveCart(); render(); }; };
       change('descValor', 'descValor', num); change('envioCosto', 'envioCosto', int);
-      change('empresa', 'empresa'); change('medioPago', 'medioPago'); change('documento', 'documento');
-      $('#pickCliente', root).onclick = () => pickCliente(id => { cart.clienteId = id; saveCart(); render(); });
+      change('empresa', 'empresa'); change('medioPago', 'medioPago'); change('documento', 'documento', x => { cart.documento = x; prellenarFactura(); return x; });
+      [['facRazon', 'razonSocial'], ['facRut', 'rut'], ['facGiro', 'giro']].forEach(([id, k]) => {
+        const el = $('#' + id, root);
+        if (el) el.oninput = () => { cart.factura = { ...(cart.factura || {}), [k]: el.value }; saveCart(); };
+      });
+      const fr = $('#facRut', root);
+      if (fr) fr.onblur = () => { if (fr.value.trim()) { fr.value = rutFormato(fr.value); cart.factura.rut = fr.value; saveCart(); if (!rutValido(fr.value)) toast('El RUT no es válido, revísalo.'); } };
+      $('#pickCliente', root).onclick = () => pickCliente(id => {
+        if (id !== cart.clienteId) cart.factura = { razonSocial: '', rut: '', giro: '' };
+        cart.clienteId = id; prellenarFactura(); saveCart(); render();
+      });
       const cc = $('#clearCliente', root); if (cc) cc.onclick = () => { cart.clienteId = null; saveCart(); render(); };
       $('#clearCart', root).onclick = () => { if (confirm('¿Vaciar la venta actual?')) { cart = emptyCart(); saveCart(); render(); } };
       $('#checkout', root).onclick = registrarVenta;
@@ -495,6 +544,10 @@ const App = (() => {
     ventas(root) {
       onInput($('#ventasQ', root), v => state.ventasQ = v);
       $('#porEmitir', root).onchange = e => { state.porEmitir = e.target.checked; render(); };
+      $$('[data-doctipo]', root).forEach(i => i.onchange = () => {
+        const sel = $$('[data-doctipo]', root).filter(x => x.checked).map(x => x.dataset.doctipo);
+        state.docTipos = sel.length === DOCUMENTOS.length ? null : sel; render();
+      });
       $$('[data-venta]', root).forEach(r => r.onclick = () => openVenta(r.dataset.venta));
     },
     inventario(root) {
@@ -595,13 +648,14 @@ const App = (() => {
         ${f('rrss', 'Usuario en RRSS (ej: @cliente)')}
         <div><label>¿De dónde viene?</label><select data-f="origen">${ORIGENES.map(o => `<option ${c.origen === o ? 'selected' : ''}>${o}</option>`).join('')}</select></div></div>
       <div style="position:relative"><label>Dirección (calle y número)</label>
-        <input data-f="direccion" id="dirInput" autocomplete="off" value="${esc(c.direccion || '')}" placeholder="Empieza a escribir y elige una sugerencia">
+        <input data-f="direccion" id="dirInput" autocomplete="off" value="${esc(c.direccion || '')}" placeholder="Escribe calle y número, y elige una sugerencia">
         <div class="list-pick" id="dirSug" hidden style="position:absolute;left:0;right:0;z-index:5;background:var(--surface)"></div></div>
       ${f('depto', 'Depto / casa / referencia')}
       <div class="grid2">${f('comuna', 'Comuna')}<div><label>Región</label><input data-f="region" list="regiones" value="${esc(c.region || '')}"></div></div>
       <datalist id="regiones">${REGIONES.map(r => `<option value="${esc(r)}">`).join('')}</datalist>
+      <div class="grid2">${f('razonSocial', 'Razón social (para factura)')}${f('rutFactura', 'RUT de facturación')}${f('giro', 'Giro')}</div>
       <div><label>Notas</label><textarea data-f="notas" rows="2">${esc(c.notas || '')}</textarea></div>
-      <div class="row"><button class="btn primary" id="cSave">Guardar</button></div>
+      <div class="row"><button class="btn primary" id="cSave">Guardar</button>${id ? '<button class="btn danger" id="cDel">Eliminar cliente</button>' : ''}</div>
       ${ventas.length ? `<h3>Compras</h3><table>${ventas.map(v => `<tr><td>${new Date(v.fecha).toLocaleDateString('es-CL')}</td><td>${esc(v.folio)}</td><td class="right num">${clp(v.total)}</td></tr>`).join('')}</table>` : ''}
       </div>`, root => {
       sugerirDirecciones(root);
@@ -609,9 +663,18 @@ const App = (() => {
         $$('[data-f]', root).forEach(i => c[i.dataset.f] = i.value.trim());
         c.telefono = c.telefono.replace(/[^\d ]/g, '').trim();
         if (!c.nombre) return toast('El nombre es obligatorio.');
+        if (c.rutFactura) { if (!rutValido(c.rutFactura)) return toast('El RUT de facturación no es válido.'); c.rutFactura = rutFormato(c.rutFactura); }
         const [saved] = await DB.save('clientes', c);
         closeModal(); toast('Cliente guardado.');
         if (onSaved) onSaved(saved.id); else render();
+      };
+      const del = $('#cDel', root);
+      // Se oculta de la lista; las ventas pasadas conservan su nombre.
+      if (del) del.onclick = async () => {
+        if (!confirm(`¿Eliminar a ${c.nombre}?` + (ventas.length ? `\n\nTiene ${ventas.length} venta(s); esas ventas se mantienen con su nombre.` : ''))) return;
+        await DB.save('clientes', { ...c, eliminado: true });
+        if (cart.clienteId === id) { cart.clienteId = null; saveCart(); }
+        closeModal(); toast('Cliente eliminado.'); render();
       };
     });
   }
@@ -634,13 +697,27 @@ const App = (() => {
       if (q.length < 5 || !navigator.onLine) return cerrar();
       timer = setTimeout(async () => {
         try {
-          const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6&bbox=-76.5,-56.5,-66,-17`);
-          const data = await res.json();
-          ultimas = (data.features || []).map(f => f.properties).filter(p => !p.countrycode || p.countrycode.toUpperCase() === 'CL').map(p => ({
-            calle: [p.street || p.name, p.housenumber].filter(Boolean).join(' '),
-            comuna: p.city || p.county || p.district || '',
-            region: regionChilena(p.state),
-          })).filter(x => x.calle);
+          // El número de casa muchas veces no está en el mapa: también busca solo la calle y le agrega el número escrito.
+          const numero = (q.match(/\b\d{1,5}[a-zA-Z]?\b/) || [''])[0];
+          const sinNumero = q.replace(/\b\d{1,5}[a-zA-Z]?\b/, ' ').replace(/\s+/g, ' ').trim();
+          const buscar = async texto => {
+            const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(texto)}&limit=10&lat=-33.45&lon=-70.65&bbox=-76.5,-56.5,-66,-17`);
+            return ((await r.json()).features || []).map(f => f.properties);
+          };
+          const listas = await Promise.all([buscar(q), ...(numero && sinNumero.length >= 3 ? [buscar(sinNumero)] : [])]);
+          const vistas = new Set();
+          ultimas = listas.flat().filter(p => !p.countrycode || p.countrycode.toUpperCase() === 'CL').map(p => {
+            const nombreCalle = p.street || (p.osm_key === 'highway' ? p.name : '');
+            return {
+              calle: nombreCalle ? [nombreCalle, p.housenumber || numero].filter(Boolean).join(' ') : '',
+              comuna: p.city || p.locality || p.county || p.district || '',
+              region: regionChilena(p.state),
+            };
+          }).filter(x => {
+            const k = (x.calle + '|' + x.comuna).toLowerCase();
+            if (!x.calle || vistas.has(k)) return false;
+            vistas.add(k); return true;
+          }).slice(0, 8);
           if (input.value.trim() !== q) return;
           box.innerHTML = ultimas.map((x, i) => `<button type="button" data-sug="${i}"><b>${esc(x.calle)}</b> <span class="muted">${esc([x.comuna, x.region].filter(Boolean).join(', '))}</span></button>`).join('');
           box.hidden = !ultimas.length;
@@ -912,9 +989,18 @@ const App = (() => {
       on('#docSave', async () => {
         const tipo = $('#docTipo', root).value, numero = $('#docNum', root).value.trim();
         const estado = tipo === 'Sin documento' ? 'no aplica' : numero ? 'emitida' : 'por emitir';
-        await DB.save('ventas', { ...v, documento: { ...(v.documento || {}), tipo, numero, estado } });
+        const { razonSocial, rut, giro, ...resto } = v.documento || {};
+        let fac = {};
+        if (tipo === 'Factura') {
+          fac = { razonSocial: $('#docRazon', root).value.trim(), rut: rutFormato($('#docRut', root).value.trim()), giro: $('#docGiro', root).value.trim() };
+          if (!fac.razonSocial) return toast('Ingresa la razón social.');
+          if (!rutValido(fac.rut)) return toast('Ingresa un RUT válido.');
+        }
+        await DB.save('ventas', { ...v, documento: { ...resto, tipo, numero, estado, ...fac } });
         toast('Documento actualizado.'); closeModal(); openVenta(v.id); render();
       });
+      const dt = $('#docTipo', root);
+      if (dt) dt.onchange = () => { $('#docFac', root).hidden = dt.value !== 'Factura'; };
       on('#mpGen', async () => { await generarLinkPago(v.id); openVenta(v.id); });
       on('#mpCopy', async () => { try { await navigator.clipboard.writeText(v.pago.link); } catch { $('#mpLink', root).select(); document.execCommand('copy'); } toast('Link copiado.'); });
       on('#mpWa', () => {

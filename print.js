@@ -21,6 +21,7 @@ const Print = (() => {
       <div>${esc(empresa.rut || '')}</div>
       <hr><div>Venta ${esc(venta.folio)}<br>${new Date(venta.fecha).toLocaleString('es-CL')}</div>
       ${cliente ? `<div>Cliente: ${esc(cliente.nombre)}</div>` : ''}
+      ${venta.documento?.razonSocial ? `<div>Factura a: ${esc(venta.documento.razonSocial)}<br>RUT ${esc(venta.documento.rut || '')}${venta.documento.giro ? '<br>Giro: ' + esc(venta.documento.giro) : ''}</div>` : ''}
       <hr><table>${lines}
       ${venta.descuento ? `<tr><td>Descuento</td><td class="r">-${clp(venta.descuento)}</td></tr>` : ''}
       ${venta.envio && venta.envio.costo ? `<tr><td>Envío ${esc(venta.envio.empresa)}</td><td class="r">${clp(venta.envio.costo)}</td></tr>` : ''}
