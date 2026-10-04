@@ -18,7 +18,7 @@ const HOJAS = {
   productos: { nombre: 'Productos', columnas: ['id', 'nombre', 'categoria', 'stockMin', 'activo'] },
   variantes: { nombre: 'Variantes', columnas: ['id', 'productoId', 'nombre', 'sku', 'costo', 'precio'] },
   clientes: { nombre: 'Clientes', columnas: ['id', 'nombre', 'rut', 'telefono', 'email', 'rrss', 'origen', 'direccion', 'comuna', 'region', 'notas'] },
-  ventas: { nombre: 'Ventas', columnas: ['id', 'folio', 'fecha', 'usuario', 'clienteId', 'subtotal', 'descuento', 'total', 'medioPago', 'estado'] },
+  ventas: { nombre: 'Ventas', columnas: ['id', 'folio', 'fecha', 'usuario', 'clienteId', 'subtotal', 'descuento', 'total', 'medioPago', 'estado', 'documentoTipo', 'documentoNumero', 'documentoEstado'] },
   compras: { nombre: 'Compras', columnas: ['id', 'folio', 'fecha', 'proveedor', 'documento', 'total', 'usuario'] },
   movimientos: { nombre: 'Movimientos', columnas: ['id', 'varianteId', 'cantidad', 'tipo', 'refId', 'fecha', 'nota'] },
 };
@@ -110,6 +110,7 @@ function push(ops) {
     const nuevas = [];
     Object.values(porTabla[tabla]).forEach(rec => {
       rec.sincronizado = ahora;
+      if (tabla === 'ventas' && rec.documento) { rec.documentoTipo = rec.documento.tipo; rec.documentoNumero = rec.documento.numero || ''; rec.documentoEstado = rec.documento.estado; }
       const row = cols.map(c => c === 'datos' ? JSON.stringify(rec) : c === 'eliminado' ? (rec.eliminado ? 'sí' : '') : valor(rec[c]));
       if (fila[rec.id]) sh.getRange(fila[rec.id], 1, 1, cols.length).setValues([row]);
       else nuevas.push(row);

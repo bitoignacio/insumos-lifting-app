@@ -26,6 +26,7 @@ const Print = (() => {
       ${venta.envio && venta.envio.costo ? `<tr><td>Envío ${esc(venta.envio.empresa)}</td><td class="r">${clp(venta.envio.costo)}</td></tr>` : ''}
       <tr><td><b>Total</b></td><td class="r"><b>${clp(venta.total)}</b></td></tr></table>
       <hr><div>Pago: ${esc(venta.medioPago)}</div>
+      ${venta.documento?.numero ? `<div>${esc(venta.documento.tipo)} N° ${esc(venta.documento.numero)}</div>` : ''}
       <p style="font-size:10px">Comprobante interno, no válido como boleta.</p>`);
   }
 

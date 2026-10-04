@@ -89,7 +89,8 @@ const App = (() => {
     const venta = {
       id, folio: folio('V'), fecha, usuario: config.usuario || '', clienteId: cart.clienteId,
       items, subtotal: t.subtotal, descuento: t.descuento, total: t.total, medioPago: cart.medioPago,
-      documento: { tipo: cart.documento, estado: cart.documento === 'Sin documento' ? 'no aplica' : 'pendiente' },
+      // Solo informativo: la boleta o factura se emite a mano en el SII y aquí se anota el número.
+      documento: { tipo: cart.documento, estado: cart.documento === 'Sin documento' ? 'no aplica' : 'por emitir', numero: '' },
       envio: cart.entrega === 'despacho'
         ? { tipo: 'despacho', empresa: cart.empresa, costo: t.envio, estado: ESTADOS_ENVIO[0], seguimiento: '' }
         : { tipo: 'retiro' },
@@ -207,7 +208,7 @@ const App = (() => {
           </div>
           <div class="grid2">
             <div><label>Medio de pago</label><select id="medioPago">${MEDIOS_PAGO.map(m => `<option ${cart.medioPago === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
-            <div><label>Documento</label><select id="documento">${DOCUMENTOS.map(m => `<option ${cart.documento === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
+            <div><label>Documento (se emite en el SII)</label><select id="documento">${DOCUMENTOS.map(m => `<option ${cart.documento === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
           </div>
           <div class="totals num">
             <div><span>Subtotal</span><span>${clp(t.subtotal)}</span></div>
@@ -227,23 +228,26 @@ const App = (() => {
       const periodo = state.ventasPeriodo || '7';
       const desde = periodoDesde(periodo);
       const list = DB.all('ventas').filter(v => !desde || v.fecha >= desde)
-        .filter(v => match(v.folio + ' ' + (cliente(v.clienteId)?.nombre || '') + ' ' + v.items.map(i => i.nombre).join(' '), state.ventasQ || ''))
+        .filter(v => match(v.folio + ' ' + (cliente(v.clienteId)?.nombre || '') + ' ' + (v.documento?.numero || '') + ' ' + v.items.map(i => i.nombre).join(' '), state.ventasQ || ''))
+        .filter(v => !state.porEmitir || (v.documento?.estado === 'por emitir' && v.estado !== 'anulada'))
         .sort((a, b) => b.fecha.localeCompare(a.fecha));
       const total = list.filter(v => v.estado === 'completada').reduce((s, v) => s + v.total, 0);
       const nPend = list.filter(v => v.estado === 'pendiente').length;
       return `<div class="card stack">
         <div class="row"><h2 class="grow">Ventas</h2>${periodoSelect('ventasPeriodo', periodo)}</div>
-        <input id="ventasQ" type="search" placeholder="Buscar por folio, cliente o producto…" value="${esc(state.ventasQ || '')}">
+        <div class="row"><input class="grow" id="ventasQ" type="search" placeholder="Buscar por folio, cliente, producto o N° de boleta…" value="${esc(state.ventasQ || '')}">
+          <label class="row" style="margin:0"><input type="checkbox" id="porEmitir" ${state.porEmitir ? 'checked' : ''}> Solo boletas/facturas por emitir</label></div>
         <div class="muted">${list.length} venta(s) · ${clp(total)} cobrado${nPend ? ` · <b>${nPend} pendiente(s) de pago</b>` : ''}</div>
         <div class="table-wrap"><table>
-          <tr><th>Fecha</th><th>Folio</th><th>Cliente</th><th>Entrega</th><th>Pago</th><th class="right">Total</th></tr>
+          <tr><th>Fecha</th><th>Folio</th><th>Cliente</th><th>Entrega</th><th>Pago</th><th>Documento</th><th class="right">Total</th></tr>
           ${list.map(v => `<tr class="click" data-venta="${v.id}">
             <td>${new Date(v.fecha).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' })}</td>
             <td>${esc(v.folio)} ${estadoPill(v)}</td>
             <td>${esc(cliente(v.clienteId)?.nombre || '—')}</td>
             <td>${v.envio?.tipo === 'despacho' ? `${esc(v.envio.empresa)} <span class="pill ${v.envio.estado === 'Entregado' ? 'ok' : v.envio.estado === 'Enviado' ? '' : 'warn'}">${esc(v.envio.estado)}</span>` : 'Retiro'}</td>
             <td>${esc(v.medioPago)}</td>
-            <td class="right num">${clp(v.total)}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">No hay ventas en este periodo.</td></tr>'}
+            <td>${esc(v.documento?.tipo || '')} ${v.documento?.estado === 'por emitir' && v.estado !== 'anulada' ? '<span class="pill warn">Por emitir</span>' : esc(v.documento?.numero ? 'N° ' + v.documento.numero : '')}</td>
+            <td class="right num">${clp(v.total)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No hay ventas en este periodo.</td></tr>'}
         </table></div></div>`;
     },
 
@@ -270,7 +274,7 @@ const App = (() => {
           <div class="card kpi"><div class="muted">Inventario a precio venta</div><div class="v">${clp(valorVenta)}</div></div>
         </div>
         <div class="card stack">
-          <div class="row"><h2 class="grow">Inventario</h2><button class="btn primary" id="newProduct">Nuevo producto</button></div>
+          <div class="row"><h2 class="grow">Inventario</h2><button class="btn" id="conteo">Conteo de inventario</button><button class="btn primary" id="newProduct">Nuevo producto</button></div>
           <div class="row"><input class="grow" id="invQ" type="search" placeholder="Buscar…" value="${esc(q)}">
             <label class="row" style="margin:0"><input type="checkbox" id="invBajo" ${soloBajo ? 'checked' : ''}> Solo stock bajo</label></div>
           <div class="table-wrap"><table>
@@ -390,6 +394,14 @@ const App = (() => {
   };
 
   const state = {};
+  function docPanel(v) {
+    const d = v.documento || {};
+    const cls = d.estado === 'emitida' ? 'ok' : d.estado === 'por emitir' ? 'warn' : '';
+    return `<div class="card stack"><div class="row"><h3 class="grow" style="margin:0">Boleta / factura (registro interno)</h3><span class="pill ${cls}">${esc(d.estado || '')}</span></div>
+      <div class="grid2"><div><label>Tipo</label><select id="docTipo">${DOCUMENTOS.map(t => `<option ${d.tipo === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+        <div><label>N° emitido en el SII</label><input id="docNum" value="${esc(d.numero || '')}" placeholder="Ej: 1234"></div></div>
+      <div class="row"><button class="btn small" id="docSave">Guardar</button></div></div>`;
+  }
   function estadoPill(v) {
     if (v.estado === 'anulada') return '<span class="pill low">Anulada</span>';
     if (v.estado === 'pendiente') return '<span class="pill warn">Pago pendiente</span>';
@@ -453,12 +465,14 @@ const App = (() => {
     },
     ventas(root) {
       onInput($('#ventasQ', root), v => state.ventasQ = v);
+      $('#porEmitir', root).onchange = e => { state.porEmitir = e.target.checked; render(); };
       $$('[data-venta]', root).forEach(r => r.onclick = () => openVenta(r.dataset.venta));
     },
     inventario(root) {
       onInput($('#invQ', root), v => state.invQ = v);
       $('#invBajo', root).onchange = e => { state.invBajo = e.target.checked; render(); };
       $('#newProduct', root).onclick = () => editProducto(null);
+      $('#conteo', root).onclick = conteoInventario;
       $$('[data-editprod]', root).forEach(a => a.onclick = e => { e.preventDefault(); editProducto(a.dataset.editprod); });
       $$('[data-ajuste]', root).forEach(b => b.onclick = () => ajustarStock(b.dataset.ajuste));
     },
@@ -633,6 +647,34 @@ const App = (() => {
     });
   }
 
+  // Revisión completa: se anota lo contado de cada producto y la app registra las diferencias como ajustes.
+  function conteoInventario() {
+    const filas = productosActivos().flatMap(p => variantesDe(p.id).map(v => ({ v, nombre: nombreVariante(v) })));
+    const contado = {};
+    modal('Conteo de inventario', `<div class="stack">
+      <p class="muted">Escribe la cantidad contada de cada producto. Los que dejes en blanco no cambian. Al guardar, la diferencia queda registrada como ajuste "Conteo de inventario".</p>
+      <input id="cq" type="search" placeholder="Buscar…">
+      <div class="table-wrap" style="max-height:50vh;overflow-y:auto"><table>
+        <tr><th>Producto</th><th class="right">Actual</th><th class="right">Contado</th></tr>
+        ${filas.map(({ v, nombre }) => `<tr data-n="${esc(nombre.toLowerCase())}"><td>${esc(nombre)}</td><td class="right num">${stockOf(v.id)}</td>
+          <td class="right"><input data-cv="${v.id}" inputmode="numeric" style="width:80px;text-align:right"></td></tr>`).join('')}
+      </table></div>
+      <div class="row"><span class="muted grow" id="cRes">0 producto(s) contados</span><button class="btn primary" id="cOk">Guardar conteo</button></div></div>`, root => {
+      $('#cq', root).oninput = e => $$('[data-n]', root).forEach(tr => tr.hidden = !match(tr.dataset.n, e.target.value));
+      $$('[data-cv]', root).forEach(i => i.oninput = () => {
+        if (i.value.trim() === '') delete contado[i.dataset.cv]; else contado[i.dataset.cv] = int(i.value);
+        $('#cRes', root).textContent = `${Object.keys(contado).length} producto(s) contados`;
+      });
+      $('#cOk', root).onclick = async () => {
+        const fecha = new Date().toISOString();
+        const movs = Object.entries(contado).map(([vid, n]) => ({ varianteId: vid, cantidad: n - stockOf(vid), tipo: 'ajuste', fecha, nota: 'Conteo de inventario', usuario: config.usuario || '' }))
+          .filter(m => m.cantidad !== 0);
+        if (movs.length) await DB.save('movimientos', movs);
+        computeStock(); closeModal(); render(); toast(`Conteo guardado: ${Object.keys(contado).length} producto(s), ${movs.length} con diferencia.`);
+      };
+    });
+  }
+
   function variantPicker(onPick) {
     const all = productosActivos().flatMap(p => variantesDe(p.id));
     const draw = q => all.filter(v => match(nombreVariante(v) + ' ' + (v.sku || ''), q)).slice(0, 40)
@@ -726,7 +768,7 @@ const App = (() => {
         ${v.descuento ? `<tr><td>Descuento</td><td class="right num">-${clp(v.descuento)}</td></tr>` : ''}
         ${env.costo ? `<tr><td>Envío</td><td class="right num">${clp(env.costo)}</td></tr>` : ''}
         <tr><td><b>Total</b> · ${esc(v.medioPago)}</td><td class="right num"><b>${clp(v.total)}</b></td></tr></table>
-      <div>Documento: <b>${esc(v.documento?.tipo || '')}</b> <span class="pill warn">${esc(v.documento?.estado || '')}</span></div>
+      ${docPanel(v)}
       ${c ? `<div>Cliente: <b>${esc(c.nombre)}</b><div class="muted">${esc([c.direccion, c.comuna, c.telefono].filter(Boolean).join(' · '))}</div></div>` : ''}
       ${env.tipo === 'despacho' ? `<div class="card stack"><h3>Despacho ${esc(env.empresa)}</h3>
         <div class="grid2"><div><label>Estado</label><select id="eEstado">${ESTADOS_ENVIO.map(s => `<option ${env.estado === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
@@ -735,6 +777,12 @@ const App = (() => {
       <div class="row"><button class="btn" id="pRec">Imprimir comprobante</button>
         ${v.estado !== 'anulada' ? `<button class="btn danger" id="vAnular">${v.estado === 'pendiente' ? 'Cancelar venta' : 'Anular venta'}</button>` : ''}</div></div>`, root => {
       const on = (sel, fn) => { const el = $(sel, root); if (el) el.onclick = fn; };
+      on('#docSave', async () => {
+        const tipo = $('#docTipo', root).value, numero = $('#docNum', root).value.trim();
+        const estado = tipo === 'Sin documento' ? 'no aplica' : numero ? 'emitida' : 'por emitir';
+        await DB.save('ventas', { ...v, documento: { ...(v.documento || {}), tipo, numero, estado } });
+        toast('Documento actualizado.'); closeModal(); openVenta(v.id); render();
+      });
       on('#mpGen', async () => { await generarLinkPago(v.id); openVenta(v.id); });
       on('#mpCopy', async () => { try { await navigator.clipboard.writeText(v.pago.link); } catch { $('#mpLink', root).select(); document.execCommand('copy'); } toast('Link copiado.'); });
       on('#mpWa', () => {

@@ -2,8 +2,8 @@
 
 ## Qué hace hoy
 - **Vender** (pantalla principal): buscar producto, elegir opción (color, tamaño o medida), descuento por producto o a la venta, retiro o despacho (Starken / Blue Express, envío lo paga el cliente), cliente, medio de pago (Efectivo, Transferencia, MercadoPago) y documento. El stock se descuenta solo.
-- **Ventas**: historial, comprobante interno, etiqueta de despacho 10 x 15 cm, estado del envío y N° de seguimiento, anular venta (devuelve el stock).
-- **Inventario**: productos con opciones, alertas de stock bajo, ajustes de stock con motivo, valor del inventario.
+- **Ventas**: historial, boleta/factura como registro interno (se emite a mano en el SII y se anota el N°; filtro "por emitir"), comprobante interno, etiqueta de despacho 10 x 15 cm, estado del envío y N° de seguimiento, anular venta (devuelve el stock).
+- **Inventario**: productos con opciones, alertas de stock bajo, **conteo de inventario** para revisar todo el stock de una vez, ajustes con motivo, valor del inventario.
 - **Compras**: registra compras a proveedores, suma stock y actualiza el costo.
 - **Clientes**: nombre, RUT, teléfono, email, RRSS, origen (RRSS / Web / WhatsApp), dirección y comuna.
 - **Resumen**: ventas, costo, ganancia y margen, por medio de pago, por origen, más vendidos y stock bajo.
@@ -24,14 +24,14 @@
 3. En la app, al elegir **MercadoPago** el botón dice **Generar link de pago**. La venta queda **pendiente de pago** y los productos reservados. La app revisa sola cada pocos minutos y cierra la venta cuando MercadoPago confirma el pago. También puedes tocar **Revisar pago**, **Marcar como pagada** o **Cancelar venta**.
 
 ## Cargar los productos
-1. En la hoja **Carga de productos** ya están tus precios; completa el Stock actual.
+1. En la hoja **Carga de productos** ya están tus precios. El stock puede quedar vacío.
 2. Productos con opciones: una fila por opción, repitiendo el nombre del producto.
 3. En la app, **Ajustes > Importar desde la hoja "Carga de productos"**.
+4. Para el stock: **Inventario > Conteo de inventario**, anota lo contado de cada producto y guarda.
 
 ## Instalar en el celular
 Abre la dirección de la app en el navegador del celular y elige **Agregar a pantalla de inicio** (Chrome: menú ⋮; iPhone/Safari: botón Compartir).
 
 ## Pendiente
 - Generar la etiqueta oficial de Starken y Blue Express desde la app (necesita las credenciales de integración de cada cuenta empresa).
-- Emitir boleta / factura electrónica (según el sistema de facturación que usen).
 - Usuarios con permisos distintos.
