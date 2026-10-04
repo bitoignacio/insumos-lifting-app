@@ -436,6 +436,10 @@ const App = (() => {
         </div>
         <div class="card stack"><h2>Respaldo manual</h2>
           <div class="row"><button class="btn" id="exportBtn">Descargar respaldo (.json)</button></div>
+        </div>
+        <div class="card stack"><h2>Borrar datos de prueba</h2>
+          <p class="muted">Borra lo que elijas en la app, en los otros equipos y en la planilla. Los productos y precios no se tocan.</p>
+          <div class="row"><button class="btn danger" id="resetBtn">Elegir qué borrar…</button></div>
         </div></div>`;
     },
   };
@@ -588,6 +592,7 @@ const App = (() => {
         catch (e) { toast('No se pudo leer la planilla: ' + e.message); }
       };
       $('#exportBtn', root).onclick = exportar;
+      $('#resetBtn', root).onclick = borrarPruebas;
     },
   };
 
@@ -947,6 +952,41 @@ const App = (() => {
       computeStock(); closeModal(); render(); toast('Compra registrada y stock actualizado.');
     };
     draw();
+  }
+
+  // Marca como eliminados los registros elegidos (así también se borran en la planilla y en los otros equipos).
+  function borrarPruebas() {
+    const opciones = [
+      ['ventas', 'Ventas', DB.all('ventas').length],
+      ['compras', 'Compras', DB.all('compras').length],
+      ['ajustes', 'Ajustes y conteos de stock', DB.all('movimientos').filter(m => m.tipo === 'ajuste').length],
+      ['clientes', 'Clientes', DB.all('clientes').length],
+      ['proveedores', 'Proveedores', DB.all('proveedores').length],
+    ];
+    modal('Borrar datos de prueba', `<div class="stack">
+      ${opciones.map(([k, n, c]) => `<label class="row" style="margin:0;color:var(--ink)"><input type="checkbox" data-borrar="${k}" ${['ventas', 'compras', 'ajustes'].includes(k) ? 'checked' : ''}> ${n} <span class="muted">(${c})</span></label>`).join('')}
+      <p class="muted">Al borrar ventas, compras y ajustes, el stock vuelve a 0 y el Resumen queda en blanco. Después puedes cargar el stock real con Inventario > Conteo de inventario.</p>
+      <div><label>Para confirmar escribe BORRAR</label><input id="resetOk" autocomplete="off"></div>
+      <div class="row"><button class="btn danger" id="resetGo">Borrar</button></div></div>`, root => {
+      $('#resetGo', root).onclick = async () => {
+        if ($('#resetOk', root).value.trim().toUpperCase() !== 'BORRAR') return toast('Escribe BORRAR para confirmar.');
+        const sel = $$('[data-borrar]', root).filter(i => i.checked).map(i => i.dataset.borrar);
+        if (!sel.length) return toast('Elige qué borrar.');
+        const fecha = new Date().toISOString();
+        const marcar = list => list.map(r => ({ ...r, eliminado: true, eliminadaEn: fecha }));
+        const refs = new Set();
+        for (const t of ['ventas', 'compras', 'clientes', 'proveedores']) if (sel.includes(t)) {
+          const list = DB.all(t);
+          if (t === 'ventas' || t === 'compras') list.forEach(r => refs.add(r.id));
+          if (list.length) await DB.save(t, marcar(list));
+        }
+        const movs = DB.all('movimientos').filter(m => (m.refId && refs.has(m.refId)) || (sel.includes('ajustes') && m.tipo === 'ajuste'));
+        if (movs.length) await DB.save('movimientos', marcar(movs));
+        if (sel.includes('clientes')) { cart.clienteId = null; saveCart(); }
+        computeStock(); closeModal(); render();
+        toast('Datos borrados. Se están enviando a la planilla.');
+      };
+    });
   }
 
   function verCompra(id) {

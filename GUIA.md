@@ -22,7 +22,7 @@
 1. Abre la planilla > **Extensiones > Apps Script**, borra todo y pega el contenido nuevo de `apps-script/Code.gs`. Guarda.
 2. **Implementar > Gestionar implementaciones** > ícono del lápiz > en "Versión" elige **Nueva versión** > **Implementar**.
 3. La URL y la clave no cambian; no hay que tocar nada en la app.
-4. La versión 3 agrega la hoja **Facturas** (razón social, RUT, giro, total y N°) y guarda los proveedores en la hoja **Proveedores**.
+4. La versión 4 agrega la hoja **Facturas** (razón social, RUT, giro, total y N°) y guarda los proveedores en la hoja **Proveedores**.
 
 ## MercadoPago (link de pago)
 1. En [mercadopago.cl/developers](https://www.mercadopago.cl/developers) entra a **Tus integraciones**, crea una aplicación y copia el **Access Token de producción**.
@@ -34,6 +34,9 @@
 2. Productos con opciones: una fila por opción, repitiendo el nombre del producto.
 3. En la app, **Ajustes > Importar desde la hoja "Carga de productos"**.
 4. Para el stock: **Inventario > Conteo de inventario**, anota lo contado de cada producto y guarda.
+
+## Borrar datos de prueba
+En **Ajustes > Borrar datos de prueba** eliges qué borrar (ventas, compras, ajustes de stock, clientes, proveedores), escribes BORRAR y confirmas. Se borra en la app, en los otros equipos y en la planilla (las filas quedan marcadas "sí" en la columna eliminado). Los productos no se tocan.
 
 ## Instalar en el celular
 Abre la dirección de la app en el navegador del celular y elige **Agregar a pantalla de inicio** (Chrome: menú ⋮; iPhone/Safari: botón Compartir).

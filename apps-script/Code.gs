@@ -23,7 +23,7 @@ const HOJAS = {
   movimientos: { nombre: 'Movimientos', columnas: ['id', 'varianteId', 'cantidad', 'tipo', 'refId', 'fecha', 'nota'] },
   proveedores: { nombre: 'Proveedores', columnas: ['id', 'nombre', 'rut', 'telefono', 'email', 'notas'] },
 };
-const VERSION = 3;
+const VERSION = 4;
 const COLUMNAS_DESPACHOS = ['ventaId', 'folio', 'fecha', 'empresa', 'costo', 'estado', 'seguimiento', 'cliente', 'direccion', 'comuna', 'telefono', 'pago'];
 const COLUMNAS_FACTURAS = ['ventaId', 'folio', 'fecha', 'razonSocial', 'rut', 'giro', 'total', 'numero', 'estado'];
 const FIJAS = ['actualizado', 'eliminado', 'datos'];
@@ -173,7 +173,7 @@ function actualizarDetalleVentas(ventas) {
   const clientes = {};
   leerTabla('clientes').forEach(c => { clientes[c.id] = c; });
   const filas = [], filasDesp = [], filasFact = [];
-  ventas.filter(v => v.estado === 'completada').forEach(v => {
+  ventas.filter(v => v.estado === 'completada' && !v.eliminado).forEach(v => {
     (v.items || []).forEach(it => {
       const neto = it.precio * it.cantidad - it.descuento;
       filas.push([v.id, v.folio, v.fecha, it.nombre, it.sku, it.cantidad, it.precio, it.descuento, neto, it.costo * it.cantidad, neto - it.costo * it.cantidad]);
