@@ -231,7 +231,7 @@ function direcciones(q) {
     return {
       calle: [parte('route'), parte('street_number')].filter(Boolean).join(' '),
       numero: parte('street_number'),
-      comuna: parte('administrative_area_level_3') || parte('locality'),
+      comuna: parte('administrative_area_level_3') || comunaDeTexto(x.formatted_address) || parte('sublocality') || parte('locality'),
       region: parte('administrative_area_level_1'),
       pais: parte('country', true),
     };
@@ -240,9 +240,19 @@ function direcciones(q) {
   return { ok: true, resultados };
 }
 
+// En Chile la dirección completa viene como "Calle 123, 7500000 Comuna, Región, Chile": la comuna va antes de la región.
+function comunaDeTexto(texto) {
+  const partes = String(texto || '').split(',').map(s => s.trim());
+  return partes.length >= 4 ? partes[partes.length - 3].replace(/^\d+\s*/, '') : '';
+}
+
 // Ejecútala una vez desde el editor si Google pide permisos para usar Maps.
 function probarDirecciones() {
-  Logger.log(JSON.stringify(direcciones('Avenida Providencia 1234, Providencia')));
+  const q = 'Avenida Providencia 1234, Providencia';
+  const r = Maps.newGeocoder().setRegion('cl').setLanguage('es').geocode(q + ', Chile');
+  (r.results || []).slice(0, 2).forEach(x => Logger.log(x.formatted_address + ' | ' + x.address_components.map(c => c.long_name + ' [' + c.types[0] + ']').join(' · ')));
+  CacheService.getScriptCache().remove('dir:' + q.toLowerCase());
+  Logger.log(JSON.stringify(direcciones(q)));
 }
 
 // ---------- MercadoPago ----------
