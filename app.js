@@ -704,50 +704,58 @@ const App = (() => {
     if (t.includes('metropolitana') || t.includes('santiago')) return 'Metropolitana de Santiago';
     return REGIONES.find(r => t.includes(n(r).split(' ')[0]) && (n(r).split(' ').length === 1 || t.includes(n(r).split(' ').slice(-1)[0]))) || texto;
   }
+  // Busca en dos fuentes: Google Maps (a través del Apps Script, más completo) y OpenStreetMap (respuesta inmediata).
   function sugerirDirecciones(root) {
     const input = $('#dirInput', root), box = $('#dirSug', root);
-    let timer, ultimas = [];
+    let timer, ultimas = [], turno = 0;
     const cerrar = () => { box.hidden = true; };
+    const NUM = /\b\d{1,5}[a-zA-Z]?\b/;
+    const mostrar = (q, listas) => {
+      if (input.value.trim() !== q) return;
+      const numero = (q.match(NUM) || [''])[0], vistas = new Set();
+      ultimas = listas.flat().map(x => ({ ...x, calle: x.calle && !x.numero && numero && !NUM.test(x.calle) ? x.calle + ' ' + numero : x.calle, region: regionChilena(x.region) }))
+        .filter(x => {
+          const k = (x.calle + '|' + x.comuna).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+          if (!x.calle || vistas.has(k)) return false;
+          vistas.add(k); return true;
+        }).slice(0, 8);
+      box.innerHTML = ultimas.map((x, i) => `<button type="button" data-sug="${i}"><b>${esc(x.calle)}</b> <span class="muted">${esc([x.comuna, x.region].filter(Boolean).join(', '))}</span></button>`).join('');
+      box.hidden = !ultimas.length;
+      $$('[data-sug]', box).forEach(b => b.onmousedown = e => {
+        e.preventDefault();
+        const x = ultimas[b.dataset.sug];
+        input.value = x.calle;
+        if (x.comuna) $('[data-f=comuna]', root).value = x.comuna;
+        if (x.region) $('[data-f=region]', root).value = x.region;
+        cerrar();
+      });
+    };
+    const osm = async q => {
+      const numero = (q.match(NUM) || [''])[0];
+      const sinNumero = q.replace(NUM, ' ').replace(/\s+/g, ' ').trim();
+      const buscar = async texto => {
+        const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(texto)}&limit=10&lat=-33.45&lon=-70.65&bbox=-76.5,-56.5,-66,-17`);
+        return ((await r.json()).features || []).map(f => f.properties);
+      };
+      const listas = await Promise.all([buscar(q), ...(numero && sinNumero.length >= 3 ? [buscar(sinNumero)] : [])]);
+      return listas.flat().filter(p => !p.countrycode || p.countrycode.toUpperCase() === 'CL').map(p => {
+        const nombreCalle = p.street || (p.osm_key === 'highway' ? p.name : '');
+        return { calle: nombreCalle ? [nombreCalle, p.housenumber].filter(Boolean).join(' ') : '', numero: p.housenumber || '',
+          comuna: p.city || p.locality || p.county || p.district || '', region: p.state || '' };
+      });
+    };
+    const google = async q => (config.url && config.clave) ? (await Sync.call({ action: 'direcciones', q })).resultados || [] : [];
     input.addEventListener('input', () => {
       clearTimeout(timer);
       const q = input.value.trim();
       if (q.length < 5 || !navigator.onLine) return cerrar();
-      timer = setTimeout(async () => {
-        try {
-          // El número de casa muchas veces no está en el mapa: también busca solo la calle y le agrega el número escrito.
-          const numero = (q.match(/\b\d{1,5}[a-zA-Z]?\b/) || [''])[0];
-          const sinNumero = q.replace(/\b\d{1,5}[a-zA-Z]?\b/, ' ').replace(/\s+/g, ' ').trim();
-          const buscar = async texto => {
-            const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(texto)}&limit=10&lat=-33.45&lon=-70.65&bbox=-76.5,-56.5,-66,-17`);
-            return ((await r.json()).features || []).map(f => f.properties);
-          };
-          const listas = await Promise.all([buscar(q), ...(numero && sinNumero.length >= 3 ? [buscar(sinNumero)] : [])]);
-          const vistas = new Set();
-          ultimas = listas.flat().filter(p => !p.countrycode || p.countrycode.toUpperCase() === 'CL').map(p => {
-            const nombreCalle = p.street || (p.osm_key === 'highway' ? p.name : '');
-            return {
-              calle: nombreCalle ? [nombreCalle, p.housenumber || numero].filter(Boolean).join(' ') : '',
-              comuna: p.city || p.locality || p.county || p.district || '',
-              region: regionChilena(p.state),
-            };
-          }).filter(x => {
-            const k = (x.calle + '|' + x.comuna).toLowerCase();
-            if (!x.calle || vistas.has(k)) return false;
-            vistas.add(k); return true;
-          }).slice(0, 8);
-          if (input.value.trim() !== q) return;
-          box.innerHTML = ultimas.map((x, i) => `<button type="button" data-sug="${i}"><b>${esc(x.calle)}</b> <span class="muted">${esc([x.comuna, x.region].filter(Boolean).join(', '))}</span></button>`).join('');
-          box.hidden = !ultimas.length;
-          $$('[data-sug]', box).forEach(b => b.onmousedown = e => {
-            e.preventDefault();
-            const x = ultimas[b.dataset.sug];
-            input.value = x.calle;
-            if (x.comuna) $('[data-f=comuna]', root).value = x.comuna;
-            if (x.region) $('[data-f=region]', root).value = x.region;
-            cerrar();
-          });
-        } catch { cerrar(); }
-      }, 400);
+      timer = setTimeout(() => {
+        const t = ++turno;
+        let g = [], o = [];
+        // Muestra lo que llegue primero y vuelve a ordenar cuando llega Google (que va primero en la lista).
+        osm(q).then(r => { o = r; if (t === turno) mostrar(q, [g, o]); }).catch(() => {});
+        google(q).then(r => { g = r; if (t === turno) mostrar(q, [g, o]); }).catch(() => {});
+      }, 500);
     });
     input.addEventListener('blur', () => setTimeout(cerrar, 150));
   }

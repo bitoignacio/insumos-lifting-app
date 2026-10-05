@@ -23,7 +23,7 @@ const HOJAS = {
   movimientos: { nombre: 'Movimientos', columnas: ['id', 'varianteId', 'cantidad', 'tipo', 'refId', 'fecha', 'nota'] },
   proveedores: { nombre: 'Proveedores', columnas: ['id', 'nombre', 'rut', 'telefono', 'email', 'notas'] },
 };
-const VERSION = 4;
+const VERSION = 5;
 const COLUMNAS_DESPACHOS = ['ventaId', 'folio', 'fecha', 'empresa', 'costo', 'estado', 'seguimiento', 'cliente', 'direccion', 'comuna', 'telefono', 'pago'];
 const COLUMNAS_FACTURAS = ['ventaId', 'folio', 'fecha', 'razonSocial', 'rut', 'giro', 'total', 'numero', 'estado'];
 const FIJAS = ['actualizado', 'eliminado', 'datos'];
@@ -52,6 +52,11 @@ function doPost(e) {
   try { body = JSON.parse(e.postData.contents); } catch (err) { return json({ ok: false, error: 'Solicitud inválida' }); }
   const clave = PropertiesService.getScriptProperties().getProperty('CLAVE');
   if (!clave || body.clave !== clave) return json({ ok: false, error: 'Clave incorrecta' });
+
+  // Las sugerencias de dirección no tocan la planilla, así que no esperan el turno de escritura.
+  if (body.action === 'direcciones') {
+    try { return json(direcciones(body.q)); } catch (err) { return json({ ok: false, error: String(err && err.message || err) }); }
+  }
 
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
@@ -209,6 +214,35 @@ function actualizarStock() {
     .sort((a, b) => String(a[1]).localeCompare(String(b[1])));
   if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 7).clearContent();
   if (filas.length) sh.getRange(2, 1, filas.length, 7).setValues(filas);
+}
+
+// ---------- Direcciones ----------
+// Sugerencias con Google Maps (incluido en Apps Script, sin costo ni clave aparte).
+function direcciones(q) {
+  q = String(q || '').trim();
+  if (q.length < 4) return { ok: true, resultados: [] };
+  const cache = CacheService.getScriptCache();
+  const k = 'dir:' + q.toLowerCase().slice(0, 200);
+  const guardado = cache.get(k);
+  if (guardado) return { ok: true, resultados: JSON.parse(guardado) };
+  const r = Maps.newGeocoder().setRegion('cl').setLanguage('es').geocode(/chile/i.test(q) ? q : q + ', Chile');
+  const resultados = (r.results || []).map(x => {
+    const parte = (tipo, corto) => { const a = (x.address_components || []).find(c => c.types.indexOf(tipo) >= 0); return a ? (corto ? a.short_name : a.long_name) : ''; };
+    return {
+      calle: [parte('route'), parte('street_number')].filter(Boolean).join(' '),
+      numero: parte('street_number'),
+      comuna: parte('administrative_area_level_3') || parte('locality'),
+      region: parte('administrative_area_level_1'),
+      pais: parte('country', true),
+    };
+  }).filter(x => x.calle && x.pais === 'CL').slice(0, 6);
+  cache.put(k, JSON.stringify(resultados), 21600);
+  return { ok: true, resultados };
+}
+
+// Ejecútala una vez desde el editor si Google pide permisos para usar Maps.
+function probarDirecciones() {
+  Logger.log(JSON.stringify(direcciones('Avenida Providencia 1234, Providencia')));
 }
 
 // ---------- MercadoPago ----------

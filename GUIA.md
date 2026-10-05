@@ -22,7 +22,8 @@
 1. Abre la planilla > **Extensiones > Apps Script**, borra todo y pega el contenido nuevo de `apps-script/Code.gs`. Guarda.
 2. **Implementar > Gestionar implementaciones** > ícono del lápiz > en "Versión" elige **Nueva versión** > **Implementar**.
 3. La URL y la clave no cambian; no hay que tocar nada en la app.
-4. La versión 4 agrega la hoja **Facturas** (razón social, RUT, giro, total y N°) y guarda los proveedores en la hoja **Proveedores**.
+4. La versión 5 agrega sugerencias de dirección con Google Maps. La primera vez, elige la función **probarDirecciones** arriba y presiona **Ejecutar** (acepta los permisos si los pide), y después haz la Nueva versión.
+5. La versión 4 agrega la hoja **Facturas** (razón social, RUT, giro, total y N°) y guarda los proveedores en la hoja **Proveedores**.
 
 ## MercadoPago (link de pago)
 1. En [mercadopago.cl/developers](https://www.mercadopago.cl/developers) entra a **Tus integraciones**, crea una aplicación y copia el **Access Token de producción**.
