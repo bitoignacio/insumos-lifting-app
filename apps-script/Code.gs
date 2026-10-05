@@ -231,19 +231,14 @@ function direcciones(q) {
     return {
       calle: [parte('route'), parte('street_number')].filter(Boolean).join(' '),
       numero: parte('street_number'),
-      comuna: parte('administrative_area_level_3') || comunaDeTexto(x.formatted_address) || parte('sublocality') || parte('locality'),
+      // En Chile Google pone la comuna en "locality" (administrative_area_level_3 a veces trae la provincia).
+      comuna: parte('locality') || parte('sublocality') || parte('administrative_area_level_3'),
       region: parte('administrative_area_level_1'),
       pais: parte('country', true),
     };
   }).filter(x => x.calle && x.pais === 'CL').slice(0, 6);
   cache.put(k, JSON.stringify(resultados), 21600);
   return { ok: true, resultados };
-}
-
-// En Chile la dirección completa viene como "Calle 123, 7500000 Comuna, Región, Chile": la comuna va antes de la región.
-function comunaDeTexto(texto) {
-  const partes = String(texto || '').split(',').map(s => s.trim());
-  return partes.length >= 4 ? partes[partes.length - 3].replace(/^\d+\s*/, '') : '';
 }
 
 // Ejecútala una vez desde el editor si Google pide permisos para usar Maps.
