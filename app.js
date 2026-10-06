@@ -320,6 +320,9 @@ const App = (() => {
           rows.push({ p, v, s, bajo });
         }
       }
+      const sel = state.invSel || (state.invSel = new Set());
+      const visibles = [...new Set(rows.map(r => r.p.id))];
+      const todos = visibles.length && visibles.every(id => sel.has(id));
       return `<div class="stack">
         <div class="kpis">
           <div class="card kpi"><div class="muted">Productos</div><div class="v">${DB.all('productos').length}</div></div>
@@ -330,14 +333,16 @@ const App = (() => {
           <div class="row"><h2 class="grow">Inventario</h2><button class="btn" id="conteo">Conteo de inventario</button><button class="btn primary" id="newProduct">Nuevo producto</button></div>
           <div class="row"><input class="grow" id="invQ" type="search" placeholder="Buscar…" value="${esc(q)}">
             <label class="row" style="margin:0"><input type="checkbox" id="invBajo" ${soloBajo ? 'checked' : ''}> Solo stock bajo</label></div>
+          ${sel.size ? `<div class="row"><b>${sel.size} producto(s) seleccionado(s)</b><button class="btn danger" id="invDel">Eliminar seleccionados</button><button class="btn" id="invSelClear">Quitar selección</button></div>` : ''}
           <div class="table-wrap"><table>
-            <tr><th>Producto</th><th>Opción</th><th>Código</th><th class="right">Costo</th><th class="right">Precio</th><th class="right">Stock</th><th></th></tr>
+            <tr><th><input type="checkbox" id="invSelAll" aria-label="Seleccionar todos" ${todos ? 'checked' : ''}></th><th>Producto</th><th>Opción</th><th>Código</th><th class="right">Costo</th><th class="right">Precio</th><th class="right">Stock</th><th></th></tr>
             ${rows.map(({ p, v, s, bajo }) => `<tr>
+              <td><input type="checkbox" data-selprod="${p.id}" aria-label="Seleccionar ${esc(p.nombre)}" ${sel.has(p.id) ? 'checked' : ''}></td>
               <td><a href="#" data-editprod="${p.id}">${esc(p.nombre)}</a>${p.activo === false ? ' <span class="pill">Inactivo</span>' : ''}<div class="muted">${esc(p.categoria || '')}</div></td>
               <td>${esc(v.nombre || '—')}</td><td>${esc(v.sku || '')}</td>
               <td class="right num">${clp(v.costo)}</td><td class="right num">${clp(v.precio)}</td>
               <td class="right num"><span class="pill ${bajo ? 'low' : 'ok'}">${s}</span></td>
-              <td class="right"><button class="btn small" data-ajuste="${v.id}">Ajustar</button></td></tr>`).join('') || '<tr><td colspan="7" class="empty">Sin productos.</td></tr>'}
+              <td class="right"><button class="btn small" data-ajuste="${v.id}">Ajustar</button></td></tr>`).join('') || '<tr><td colspan="8" class="empty">Sin productos.</td></tr>'}
           </table></div></div></div>`;
     },
 
@@ -573,6 +578,11 @@ const App = (() => {
       $('#conteo', root).onclick = conteoInventario;
       $$('[data-editprod]', root).forEach(a => a.onclick = e => { e.preventDefault(); editProducto(a.dataset.editprod); });
       $$('[data-ajuste]', root).forEach(b => b.onclick = () => ajustarStock(b.dataset.ajuste));
+      const sel = state.invSel;
+      $$('[data-selprod]', root).forEach(i => i.onchange = () => { i.checked ? sel.add(i.dataset.selprod) : sel.delete(i.dataset.selprod); render(); });
+      $('#invSelAll', root).onchange = e => { $$('[data-selprod]', root).forEach(i => e.target.checked ? sel.add(i.dataset.selprod) : sel.delete(i.dataset.selprod)); render(); };
+      const clr = $('#invSelClear', root); if (clr) clr.onclick = () => { sel.clear(); render(); };
+      const del = $('#invDel', root); if (del) del.onclick = () => eliminarProductos([...sel]);
     },
     compras(root) {
       $('#newCompra', root).onclick = () => nuevaCompra();
@@ -971,6 +981,22 @@ const App = (() => {
   }
 
   // Marca como eliminados los registros elegidos (así también se borran en la planilla y en los otros equipos).
+  // Los productos se ocultan, pero las ventas, compras y movimientos guardan su nombre, así que el historial no se pierde.
+  async function eliminarProductos(ids) {
+    const prods = ids.map(id => producto(id)).filter(p => p && !p.eliminado);
+    if (!prods.length) return;
+    const lista = prods.slice(0, 10).map(p => '• ' + p.nombre).join('\n') + (prods.length > 10 ? `\n… y ${prods.length - 10} más` : '');
+    if (!confirm(`¿Eliminar ${prods.length} producto(s)?\n\n${lista}\n\nDejarán de aparecer en ventas e inventario. Las ventas, compras y movimientos anteriores se mantienen.`)) return;
+    const fecha = new Date().toISOString();
+    const vars = prods.flatMap(p => variantesDe(p.id));
+    await DB.save('productos', prods.map(p => ({ ...p, eliminado: true, eliminadaEn: fecha })));
+    if (vars.length) await DB.save('variantes', vars.map(v => ({ ...v, eliminado: true, eliminadaEn: fecha })));
+    const quitar = new Set(vars.map(v => v.id));
+    if (cart.lines.some(l => quitar.has(l.varianteId))) { cart.lines = cart.lines.filter(l => !quitar.has(l.varianteId)); saveCart(); }
+    state.invSel.clear(); computeStock(); render();
+    toast(`${prods.length} producto(s) eliminado(s).`);
+  }
+
   function borrarPruebas() {
     const opciones = [
       ['prueba', 'Solo ventas de prueba', DB.all('ventas').filter(v => v.prueba).length],
