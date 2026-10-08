@@ -8,7 +8,7 @@ const App = (() => {
 
   const MEDIOS_PAGO = ['Efectivo', 'Transferencia', 'Transbank', 'MercadoPago', 'MercadoPago Web'];
   // Medios en que el dinero no se ve al momento: la venta queda con el pago "por confirmar" hasta marcarlo.
-  const PAGO_POR_CONFIRMAR = ['Transferencia', 'MercadoPago Web'];
+  const PAGO_POR_CONFIRMAR = ['Transferencia', 'Transbank', 'MercadoPago Web'];
   const EMPRESAS_ENVIO = ['Starken', 'Blue Express', 'Pyme'];
   const CON_PAGO_ENVIO = ['Starken', 'Blue Express']; // envío "pagado" o "por pagar" (lo paga el cliente al recibir)
   const PAISES = [['+56', 'Chile'], ['+54', 'Argentina'], ['+51', 'Perú'], ['+591', 'Bolivia'], ['+57', 'Colombia'], ['+593', 'Ecuador'],
