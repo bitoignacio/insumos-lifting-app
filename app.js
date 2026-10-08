@@ -1263,11 +1263,20 @@ const App = (() => {
   // ---------- Inicio ----------
   async function saveConfig() { await DB.setMeta('config', config); }
 
+  // Las ventas con Transbank anteriores al cambio quedaron "pagadas" sin que nadie las confirmara: se dejan por confirmar.
+  // Las confirmadas a mano tienen fecha de pago, así que no se tocan.
+  async function desmarcarTransbankAntiguas() {
+    const list = DB.all('ventas').filter(v => v.medioPago === 'Transbank' && v.estado === 'completada' && v.pago?.estado === 'pagado' && !v.pago.pagadoEn);
+    if (list.length) await DB.save('ventas', list.map(v => ({ ...v, pago: { ...v.pago, estado: 'por confirmar' } })));
+    return list.length;
+  }
+
   async function init() {
     await DB.load();
     config = await DB.getMeta('config', {});
     App.config = config;
     computeStock();
+    desmarcarTransbankAntiguas();
     $$('#tabs button').forEach(b => b.onclick = () => { view = b.dataset.view; render(); window.scrollTo(0, 0); });
     $('#modalClose').onclick = closeModal;
     $('#modal').onclick = e => { if (e.target.id === 'modal') closeModal(); };
@@ -1293,7 +1302,7 @@ const App = (() => {
     }
   }
 
-  return { init, revisarPagos, refresh() { computeStock(); if (!document.activeElement.matches('input,textarea')) render(); }, config };
+  return { init, revisarPagos, refresh() { desmarcarTransbankAntiguas(); computeStock(); if (!document.activeElement.matches('input,textarea')) render(); }, config };
 })();
 
 App.init();
