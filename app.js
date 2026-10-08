@@ -6,7 +6,9 @@ const App = (() => {
   const num = v => { const n = parseFloat(String(v ?? '').replace(/\./g, '').replace(',', '.')); return isNaN(n) ? 0 : n; };
   const int = v => Math.round(num(v));
 
-  const MEDIOS_PAGO = ['Efectivo', 'Transferencia', 'MercadoPago'];
+  const MEDIOS_PAGO = ['Efectivo', 'Transferencia', 'Transbank', 'MercadoPago', 'MercadoPago Web'];
+  // Medios en que el dinero no se ve al momento: la venta queda con el pago "por confirmar" hasta marcarlo.
+  const PAGO_POR_CONFIRMAR = ['Transferencia', 'MercadoPago Web'];
   const EMPRESAS_ENVIO = ['Starken', 'Blue Express', 'Pyme'];
   const CON_PAGO_ENVIO = ['Starken', 'Blue Express']; // envío "pagado" o "por pagar" (lo paga el cliente al recibir)
   const PAISES = [['+56', 'Chile'], ['+54', 'Argentina'], ['+51', 'Perú'], ['+591', 'Bolivia'], ['+57', 'Colombia'], ['+593', 'Ecuador'],
@@ -134,7 +136,7 @@ const App = (() => {
       estado: cart.medioPago === 'MercadoPago' ? 'pendiente' : 'completada', nota: cart.nota || '',
       // Las ventas de prueba no cuentan en el Resumen y se borran desde Ajustes.
       ...(cart.prueba ? { prueba: true } : {}),
-      pago: cart.medioPago === 'MercadoPago' ? { estado: 'pendiente', link: '' } : { estado: 'pagado' },
+      pago: cart.medioPago === 'MercadoPago' ? { estado: 'pendiente', link: '' } : { estado: PAGO_POR_CONFIRMAR.includes(cart.medioPago) ? 'por confirmar' : 'pagado' },
     };
     await DB.save('ventas', venta);
     // Guarda los datos de facturación en el cliente para la próxima vez.
@@ -168,6 +170,14 @@ const App = (() => {
     const v = DB.get('ventas', id);
     if (v.estado !== 'pendiente') return;
     await DB.save('ventas', { ...v, estado: 'completada', pago: { ...(v.pago || {}), ...detalle, estado: 'pagado', pagadoEn: new Date().toISOString() } });
+  }
+
+  const pagoConfirmado = v => v.estado === 'completada' && v.pago?.estado !== 'por confirmar';
+  async function confirmarPago(id, pagado) {
+    const v = DB.get('ventas', id);
+    if (v.estado === 'pendiente') { if (pagado) await marcarPagada(id, { manual: true }); return; }
+    if (v.estado !== 'completada') return;
+    await DB.save('ventas', { ...v, pago: { ...(v.pago || {}), estado: pagado ? 'pagado' : 'por confirmar', pagadoEn: pagado ? new Date().toISOString() : '', confirmadoPor: pagado ? config.usuario || '' : '' } });
   }
 
   // Revisa en MercadoPago si las ventas pendientes ya se pagaron y las cierra solas.
@@ -281,6 +291,7 @@ const App = (() => {
         .filter(v => match([v.folio, cliente(v.clienteId)?.nombre, v.documento?.numero, v.documento?.razonSocial, v.documento?.rut, ...v.items.map(i => i.nombre)].join(' '), state.ventasQ || ''))
         .filter(v => !state.docEstados || (state.docEstados.includes(v.documento?.estado) && v.estado !== 'anulada'))
         .filter(v => !state.docTipos || state.docTipos.includes(v.documento?.tipo || 'Sin documento'))
+        .filter(v => !state.porConfirmar || (v.estado !== 'anulada' && !pagoConfirmado(v)))
         .sort((a, b) => b.fecha.localeCompare(a.fecha));
       const total = list.filter(v => v.estado === 'completada' && !v.prueba).reduce((s, v) => s + v.total, 0);
       const nPend = list.filter(v => v.estado === 'pendiente').length;
@@ -289,6 +300,7 @@ const App = (() => {
         <div class="row"><input class="grow" id="ventasQ" type="search" placeholder="Buscar por folio, cliente, producto o N° de boleta…" value="${esc(state.ventasQ || '')}">
 </div>
         <div class="row"><span class="muted">Boletas/facturas:</span>${[['por emitir', 'Por emitir'], ['emitida', 'Emitidas']].map(([k, n]) => `<label class="row" style="margin:0"><input type="checkbox" data-docestado="${k}" ${state.docEstados?.includes(k) ? 'checked' : ''}> ${n}</label>`).join('')}</div>
+        <div class="row"><label class="row" style="margin:0"><input type="checkbox" id="porConfirmar" ${state.porConfirmar ? 'checked' : ''}> Solo pagos por confirmar</label></div>
         <div class="row"><span class="muted">Documento:</span>${DOCUMENTOS.map(t => `<label class="row" style="margin:0"><input type="checkbox" data-doctipo="${t}" ${!state.docTipos || state.docTipos.includes(t) ? 'checked' : ''}> ${t}</label>`).join('')}</div>
         <div class="muted">${list.length} venta(s) · ${clp(total)} cobrado${nPend ? ` · <b>${nPend} pendiente(s) de pago</b>` : ''}</div>
         <div class="table-wrap"><table>
@@ -298,7 +310,7 @@ const App = (() => {
             <td>${esc(v.folio)} ${estadoPill(v)}</td>
             <td>${esc(cliente(v.clienteId)?.nombre || '—')}</td>
             <td>${v.envio?.tipo === 'despacho' ? `${esc(v.envio.empresa)}${v.envio.pago ? ' · ' + esc(v.envio.pago) : ''} <span class="pill ${v.envio.estado === 'Entregado' ? 'ok' : v.envio.estado === 'Enviado' ? '' : 'warn'}">${esc(v.envio.estado)}</span>` : 'Retiro'}</td>
-            <td>${esc(v.medioPago)}</td>
+            <td>${esc(v.medioPago)}${v.estado === 'anulada' ? '' : `<label class="row pago-check" style="margin:4px 0 0;color:var(--ink)"><input type="checkbox" data-pagado="${v.id}" ${pagoConfirmado(v) ? 'checked' : ''}> Pagado</label>`}</td>
             <td>${esc(v.documento?.tipo || '')} ${v.documento?.estado === 'por emitir' && v.estado !== 'anulada' ? '<span class="pill warn">Por emitir</span>' : esc(v.documento?.numero ? 'N° ' + v.documento.numero : '')}${v.documento?.razonSocial ? `<div class="muted">${esc(v.documento.razonSocial)} · ${esc(v.documento.rut || '')}</div>` : ''}</td>
             <td class="right num">${clp(v.total)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No hay ventas en este periodo.</td></tr>'}
         </table></div></div>`;
@@ -512,6 +524,8 @@ const App = (() => {
     const main = $('#view');
     const focused = document.activeElement && document.activeElement.id;
     const caret = focused && document.activeElement.selectionStart;
+    // Guarda el scroll de la página y de los recuadros con scroll propio para que no salten al volver a dibujar.
+    const scrollY = window.scrollY, cajas = ['.cart', '.table-wrap'].map(sel => $$(sel, main).map(el => el.scrollTop));
     main.innerHTML = views[view]();
     $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
     bind[view] && bind[view](main);
@@ -521,7 +535,9 @@ const App = (() => {
       render();
     });
     $$('[data-rango]', main).forEach(i => i.onchange = () => { state[i.dataset.rango] = i.value; render(); });
-    if (focused && $('#' + focused)) { const el = $('#' + focused); el.focus(); try { el.setSelectionRange(caret, caret); } catch {} }
+    ['.cart', '.table-wrap'].forEach((sel, i) => $$(sel, main).forEach((el, j) => { if (cajas[i][j]) el.scrollTop = cajas[i][j]; }));
+    window.scrollTo(0, scrollY);
+    if (focused && $('#' + focused)) { const el = $('#' + focused); el.focus({ preventScroll: true }); try { el.setSelectionRange(caret, caret); } catch {} }
   }
   const onInput = (el, fn) => el && (el.oninput = () => { fn(el.value); render(); });
 
@@ -569,7 +585,15 @@ const App = (() => {
         const sel = $$('[data-doctipo]', root).filter(x => x.checked).map(x => x.dataset.doctipo);
         state.docTipos = sel.length === DOCUMENTOS.length ? null : sel; render();
       });
-      $$('[data-venta]', root).forEach(r => r.onclick = () => openVenta(r.dataset.venta));
+      $$('[data-venta]', root).forEach(r => r.onclick = e => { if (!e.target.closest('.pago-check')) openVenta(r.dataset.venta); });
+      $('#porConfirmar', root).onchange = e => { state.porConfirmar = e.target.checked; render(); };
+      $$('[data-pagado]', root).forEach(i => i.onchange = async () => {
+        const v = DB.get('ventas', i.dataset.pagado);
+        if (!i.checked && !confirm(`¿Marcar el pago de ${v.folio} como no confirmado?`)) { i.checked = true; return; }
+        if (i.checked && v.estado === 'pendiente' && !confirm(`¿Confirmar que ${v.folio} ya está pagada? La venta se cerrará.`)) { i.checked = false; return; }
+        await confirmarPago(v.id, i.checked); render();
+        toast(i.checked ? `Pago de ${v.folio} confirmado.` : `Pago de ${v.folio} por confirmar.`);
+      });
     },
     inventario(root) {
       onInput($('#invQ', root), v => state.invQ = v);
@@ -1065,12 +1089,16 @@ const App = (() => {
           <div class="row"><button class="btn primary" id="mpCopy">Copiar link</button><button class="btn" id="mpWa">Enviar por WhatsApp</button><button class="btn" id="mpCheck">Revisar pago</button></div>`
           : '<div class="row"><button class="btn primary" id="mpGen">Generar link de pago</button></div>'}
         <div class="row"><button class="btn small" id="mpManual">Marcar como pagada</button></div></div>` : ''}
+      ${v.estado === 'completada' && v.pago?.estado === 'por confirmar' ? `<div class="card row"><div class="grow"><b>Pago por confirmar</b><div class="muted">${esc(v.medioPago)}: revisa que el dinero haya llegado.</div></div><button class="btn primary" id="pagoOk">Confirmar pago</button></div>` : ''}
       <table>${v.items.map(i => `<tr><td>${i.cantidad} × ${esc(i.nombre)}</td><td class="right num">${clp(i.total)}</td></tr>`).join('')}
         ${v.descuento ? `<tr><td>Descuento</td><td class="right num">-${clp(v.descuento)}</td></tr>` : ''}
         ${env.costo ? `<tr><td>Envío</td><td class="right num">${clp(env.costo)}</td></tr>` : ''}
         <tr><td><b>Total</b> · ${esc(v.medioPago)}</td><td class="right num"><b>${clp(v.total)}</b></td></tr></table>
       ${docPanel(v)}
-      ${c ? `<div>Cliente: <b>${esc(c.nombre)}</b><div class="muted">${esc([c.direccion, c.comuna, telefonoDe(c)].filter(Boolean).join(' · '))}</div></div>` : ''}
+      ${c ? `<div class="card"><h3>Cliente</h3><table class="ficha">
+        ${[['Nombre', c.nombre], ['RUT', c.rut], ['Correo', c.email], ['Teléfono', telefonoDe(c)], ['RRSS', c.rrss],
+          ['Dirección', [c.direccion, c.depto].filter(Boolean).join(', ')], ['Comuna', c.comuna], ['Región', c.region]]
+          .filter(([, x]) => x).map(([k, x]) => `<tr><th>${k}</th><td>${esc(x)}</td></tr>`).join('')}</table></div>` : ''}
       ${env.tipo === 'despacho' ? `<div class="card stack"><h3>Despacho ${esc(env.empresa)}${env.pago ? ' · ' + esc(env.pago) : ''}</h3>
         <div class="grid2"><div><label>Estado</label><select id="eEstado">${ESTADOS_ENVIO.map(s => `<option ${env.estado === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
           <div><label>N° de seguimiento</label><input id="eSeg" value="${esc(env.seguimiento || '')}"></div></div>
@@ -1093,6 +1121,7 @@ const App = (() => {
       });
       const dt = $('#docTipo', root);
       if (dt) dt.onchange = () => { $('#docFac', root).hidden = dt.value !== 'Factura'; };
+      on('#pagoOk', async () => { await confirmarPago(v.id, true); toast('Pago confirmado.'); closeModal(); openVenta(v.id); render(); });
       on('#mpGen', async () => { await generarLinkPago(v.id); openVenta(v.id); });
       on('#mpCopy', async () => { try { await navigator.clipboard.writeText(v.pago.link); } catch { $('#mpLink', root).select(); document.execCommand('copy'); } toast('Link copiado.'); });
       on('#mpWa', () => {

@@ -143,3 +143,5 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--brand-soft);
   .pos:not(.buscando) .products { display: none; }
   .pos:not(.buscando) .solo-movil { display: block; }
 }
+table.ficha th { width: 95px; font-weight: 600; color: var(--muted); font-size: .85rem; }
+table.ficha td, table.ficha th { padding: 5px 6px; }
