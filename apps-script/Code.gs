@@ -23,7 +23,7 @@ const HOJAS = {
   movimientos: { nombre: 'Movimientos', columnas: ['id', 'varianteId', 'cantidad', 'tipo', 'refId', 'fecha', 'nota'] },
   proveedores: { nombre: 'Proveedores', columnas: ['id', 'nombre', 'rut', 'telefono', 'email', 'notas'] },
 };
-const VERSION = 5;
+const VERSION = 6;
 const COLUMNAS_DESPACHOS = ['ventaId', 'folio', 'fecha', 'empresa', 'costo', 'estado', 'seguimiento', 'cliente', 'direccion', 'comuna', 'telefono', 'pago'];
 const COLUMNAS_FACTURAS = ['ventaId', 'folio', 'fecha', 'razonSocial', 'rut', 'giro', 'total', 'numero', 'estado'];
 const FIJAS = ['actualizado', 'eliminado', 'datos'];
@@ -67,6 +67,7 @@ function doPost(e) {
     if (body.action === 'carga') return json(carga());
     if (body.action === 'mpLink') return json(mpLink(body));
     if (body.action === 'mpEstado') return json(mpEstado(body.ventaId));
+    if (body.action === 'mpRecibidos') return json(mpRecibidos(body.dias));
     return json({ ok: false, error: 'Acción desconocida' });
   } catch (err) {
     return json({ ok: false, error: String(err && err.message || err) });
@@ -281,4 +282,13 @@ function mpEstado(ventaId) {
   const data = mpFetch('https://api.mercadopago.com/v1/payments/search?sort=date_created&criteria=desc&external_reference=' + encodeURIComponent(ventaId));
   const aprobado = (data.results || []).filter(p => p.status === 'approved')[0];
   return { ok: true, pagado: !!aprobado, pagoId: aprobado ? aprobado.id : null, medio: aprobado ? aprobado.payment_type_id : null };
+}
+
+// Pagos aprobados de los últimos días (incluye los del botón de pago de la página web), para confirmar ventas "MercadoPago Web".
+function mpRecibidos(dias) {
+  const d = Math.min(Math.max(Number(dias) || 15, 1), 60);
+  const data = mpFetch('https://api.mercadopago.com/v1/payments/search?status=approved&sort=date_created&criteria=desc&limit=100' +
+    '&range=date_created&begin_date=NOW-' + d + 'DAYS&end_date=NOW');
+  return { ok: true, pagos: (data.results || []).map(p => ({ id: p.id, monto: Math.round(Number(p.transaction_amount) || 0),
+    fecha: p.date_approved || p.date_created, ref: p.external_reference || '', email: (p.payer && p.payer.email) || '' })) };
 }

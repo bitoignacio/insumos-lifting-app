@@ -1,5 +1,5 @@
 // Guarda la app en el dispositivo para que abra sin internet.
-const CACHE = 'insumos-lifting-v15';
+const CACHE = 'insumos-lifting-v16';
 const FILES = ['./', 'index.html', 'styles.css', 'db.js', 'sync.js', 'print.js', 'app.js', 'manifest.webmanifest', 'icon.svg'];
 
 self.addEventListener('install', e => {

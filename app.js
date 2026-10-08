@@ -173,11 +173,38 @@ const App = (() => {
   }
 
   const pagoConfirmado = v => v.estado === 'completada' && v.pago?.estado !== 'por confirmar';
-  async function confirmarPago(id, pagado) {
+  async function confirmarPago(id, pagado, detalle = {}) {
     const v = DB.get('ventas', id);
     if (v.estado === 'pendiente') { if (pagado) await marcarPagada(id, { manual: true }); return; }
     if (v.estado !== 'completada') return;
-    await DB.save('ventas', { ...v, pago: { ...(v.pago || {}), estado: pagado ? 'pagado' : 'por confirmar', pagadoEn: pagado ? new Date().toISOString() : '', confirmadoPor: pagado ? config.usuario || '' : '' } });
+    const { mpPagoId, ...resto } = v.pago || {};
+    await DB.save('ventas', { ...v, pago: { ...resto, estado: pagado ? 'pagado' : 'por confirmar', pagadoEn: pagado ? new Date().toISOString() : '',
+      confirmadoPor: pagado ? (detalle.mpPagoId ? 'MercadoPago' : config.usuario || '') : '', ...(pagado ? detalle : {}) } });
+  }
+
+  // Ventas "MercadoPago Web": busca en MercadoPago un pago aprobado por el mismo monto, cercano a la fecha de la venta y que no esté usado en otra venta.
+  async function revisarPagosWeb() {
+    const dia = 864e5;
+    const ventas = DB.all('ventas').filter(v => v.medioPago === 'MercadoPago Web' && v.estado === 'completada' && v.pago?.estado === 'por confirmar'
+      && Date.now() - new Date(v.fecha) < 14 * dia).sort((a, b) => a.fecha.localeCompare(b.fecha));
+    if (!ventas.length) return 0;
+    const { pagos = [] } = await Sync.call({ action: 'mpRecibidos', dias: 15 });
+    const todas = DB.all('ventas'), idsVentas = new Set(todas.map(v => v.id));
+    const usados = new Set(todas.map(v => v.pago?.mpPagoId).filter(Boolean).map(String));
+    let n = 0;
+    for (const v of ventas) {
+      const email = (cliente(v.clienteId)?.email || '').toLowerCase();
+      const t = new Date(v.fecha).getTime();
+      const candidatos = pagos.filter(p => !usados.has(String(p.id)) && !idsVentas.has(p.ref) && p.monto === Math.round(v.total)
+        && Math.abs(new Date(p.fecha).getTime() - t) <= 3 * dia)
+        .sort((a, b) => (b.email && b.email.toLowerCase() === email) - (a.email && a.email.toLowerCase() === email)
+          || Math.abs(new Date(a.fecha) - t) - Math.abs(new Date(b.fecha) - t));
+      if (!candidatos.length) continue;
+      usados.add(String(candidatos[0].id));
+      await confirmarPago(v.id, true, { mpPagoId: candidatos[0].id });
+      n++;
+    }
+    return n;
   }
 
   // Revisa en MercadoPago si las ventas pendientes ya se pagaron y las cierra solas.
@@ -194,6 +221,7 @@ const App = (() => {
         const r = await Sync.call({ action: 'mpEstado', ventaId: id });
         if (r.pagado) { await marcarPagada(id, { mpPagoId: r.pagoId, medio: r.medio || '' }); cerradas++; }
       }
+      if (!ids) cerradas += await revisarPagosWeb();
     } catch (e) { /* se reintenta en la próxima sincronización */ }
     finally { revisando = false; }
     if (cerradas) { toast(cerradas === 1 ? 'Se recibió un pago de MercadoPago.' : `Se recibieron ${cerradas} pagos de MercadoPago.`); render(); }
@@ -1104,7 +1132,8 @@ const App = (() => {
           <div><label>N° de seguimiento</label><input id="eSeg" value="${esc(env.seguimiento || '')}"></div></div>
         <div class="row"><button class="btn" id="eSave">Guardar despacho</button><button class="btn" id="pLabel">Imprimir etiqueta</button></div></div>` : ''}
       <div class="row"><button class="btn" id="pRec">Imprimir comprobante</button>
-        ${v.estado !== 'anulada' ? `<button class="btn danger" id="vAnular">${v.estado === 'pendiente' ? 'Cancelar venta' : 'Anular venta'}</button>` : ''}</div></div>`, root => {
+        ${v.estado !== 'anulada' ? `<button class="btn danger" id="vAnular">${v.estado === 'pendiente' ? 'Cancelar venta' : 'Anular venta'}</button>` : ''}
+        <button class="btn danger" id="vEliminar">Eliminar venta</button></div></div>`, root => {
       const on = (sel, fn) => { const el = $(sel, root); if (el) el.onclick = fn; };
       on('#docSave', async () => {
         const tipo = $('#docTipo', root).value, numero = $('#docNum', root).value.trim();
@@ -1121,6 +1150,15 @@ const App = (() => {
       });
       const dt = $('#docTipo', root);
       if (dt) dt.onchange = () => { $('#docFac', root).hidden = dt.value !== 'Factura'; };
+      // Eliminar borra la venta de todas partes (también de la planilla y del Resumen) y devuelve el stock. Anular, en cambio, la deja registrada como anulada.
+      on('#vEliminar', async () => {
+        if (!confirm(`¿Eliminar la venta ${v.folio} por ${clp(v.total)}?\n\nDesaparece de Ventas, del Resumen y de la planilla, y los productos vuelven al stock. No se puede deshacer.`)) return;
+        const fecha = new Date().toISOString();
+        await DB.save('ventas', { ...v, eliminado: true, eliminadaEn: fecha, eliminadaPor: config.usuario || '' });
+        const movs = DB.all('movimientos').filter(m => m.refId === v.id);
+        if (movs.length) await DB.save('movimientos', movs.map(m => ({ ...m, eliminado: true, eliminadaEn: fecha })));
+        computeStock(); closeModal(); render(); toast(`Venta ${v.folio} eliminada.`);
+      });
       on('#pagoOk', async () => { await confirmarPago(v.id, true); toast('Pago confirmado.'); closeModal(); openVenta(v.id); render(); });
       on('#mpGen', async () => { await generarLinkPago(v.id); openVenta(v.id); });
       on('#mpCopy', async () => { try { await navigator.clipboard.writeText(v.pago.link); } catch { $('#mpLink', root).select(); document.execCommand('copy'); } toast('Link copiado.'); });
