@@ -20,6 +20,14 @@ const App = (() => {
   const CANALES = ['RRSS', 'Web', 'WhatsApp', 'Presencial', 'Otro'];
   // Canal de la venta: el elegido en la venta o, si no, el origen del cliente.
   const canalDe = v => v.canal || cliente(v.clienteId)?.origen || '';
+  const ICONOS_CANAL = {
+    WhatsApp: '<svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="11" fill="#25D366"/><path fill="#fff" d="M16.6 13.9c-.2-.1-1.4-.7-1.6-.8-.2-.1-.4-.1-.5.1l-.7.9c-.1.2-.3.2-.5.1-.7-.3-1.9-1-2.8-2.4-.2-.3.2-.3.6-1 .1-.2 0-.3 0-.4l-.7-1.7c-.2-.4-.4-.4-.5-.4h-.5c-.2 0-.4.1-.6.3-.2.2-.8.8-.8 1.9s.8 2.2.9 2.4c.1.1 1.6 2.5 4 3.5 1.5.6 2 .7 2.8.6.5-.1 1.4-.6 1.6-1.1.2-.5.2-1 .1-1.1 0-.1-.2-.2-.4-.3z"/><path fill="none" stroke="#fff" stroke-width="1.4" d="M6.3 17.8l.8-2.8a6.6 6.6 0 1 1 2.5 2.3z"/></svg>',
+    RRSS: '<svg viewBox="0 0 24 24" width="22" height="22"><defs><linearGradient id="igc" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#FEDA75"/><stop offset=".4" stop-color="#FA7E1E"/><stop offset=".7" stop-color="#D62976"/><stop offset="1" stop-color="#4F5BD5"/></linearGradient></defs><rect x="1" y="1" width="22" height="22" rx="6" fill="url(#igc)"/><rect x="6" y="6" width="12" height="12" rx="3.5" fill="none" stroke="#fff" stroke-width="1.8"/><circle cx="12" cy="12" r="2.8" fill="none" stroke="#fff" stroke-width="1.8"/><circle cx="16.3" cy="7.7" r="1" fill="#fff"/></svg>',
+    Web: '<svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="11" fill="#3b82f6"/><g fill="none" stroke="#fff" stroke-width="1.4"><circle cx="12" cy="12" r="6.5"/><ellipse cx="12" cy="12" rx="2.8" ry="6.5"/><path d="M5.5 12h13M6.5 8.8h11M6.5 15.2h11"/></g></svg>',
+    Presencial: '<svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="11" fill="#b0476b"/><g fill="none" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"><path d="M6.5 10.5h11V17h-11z"/><path d="M5.8 10.5 7 7h10l1.2 3.5"/><path d="M10.5 17v-3.5h3V17"/></g></svg>',
+    Otro: '<svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="11" fill="#9ca3af"/><g fill="#fff"><circle cx="7.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="16.5" cy="12" r="1.6"/></g></svg>',
+  };
+  const iconoCanal = c => c ? `<span class="canal" title="${esc(c)}" aria-label="${esc(c)}">${ICONOS_CANAL[c] || esc(c)}</span>` : '—';
   const DOCUMENTOS = ['Boleta', 'Factura', 'Sin documento'];
   const ESTADOS_ENVIO = ['Por preparar', 'Listo para enviar', 'Enviado', 'Entregado'];
 
@@ -325,16 +333,22 @@ const App = (() => {
         .filter(v => !state.docEstados || (state.docEstados.includes(v.documento?.estado) && v.estado !== 'anulada'))
         .filter(v => !state.docTipos || state.docTipos.includes(v.documento?.tipo || 'Sin documento'))
         .filter(v => !state.porConfirmar || (v.estado !== 'anulada' && !pagoConfirmado(v)))
+        .filter(v => !state.canales || state.canales.includes(canalDe(v)))
         .sort((a, b) => b.fecha.localeCompare(a.fecha));
       const total = list.filter(v => v.estado === 'completada' && !v.prueba).reduce((s, v) => s + v.total, 0);
       const nPend = list.filter(v => v.estado === 'pendiente').length;
+      const nFiltros = [state.canales, state.porConfirmar, state.docEstados, state.docTipos].filter(Boolean).length;
       return `<div class="card stack">
         <div class="row"><h2 class="grow">Ventas</h2>${periodoSelect('ventasPeriodo', periodo)}</div>
         <div class="row"><input class="grow" id="ventasQ" type="search" placeholder="Buscar por folio, cliente, producto o N° de boleta…" value="${esc(state.ventasQ || '')}">
-</div>
-        <div class="row"><span class="muted">Boletas/facturas:</span>${[['por emitir', 'Por emitir'], ['emitida', 'Emitidas']].map(([k, n]) => `<label class="row" style="margin:0"><input type="checkbox" data-docestado="${k}" ${state.docEstados?.includes(k) ? 'checked' : ''}> ${n}</label>`).join('')}</div>
-        <div class="row"><label class="row" style="margin:0"><input type="checkbox" id="porConfirmar" ${state.porConfirmar ? 'checked' : ''}> Solo pagos por confirmar</label></div>
-        <div class="row"><span class="muted">Documento:</span>${DOCUMENTOS.map(t => `<label class="row" style="margin:0"><input type="checkbox" data-doctipo="${t}" ${!state.docTipos || state.docTipos.includes(t) ? 'checked' : ''}> ${t}</label>`).join('')}</div>
+          <details class="filtros" id="filtros" ${state.filtrosOpen ? 'open' : ''}><summary class="btn ${nFiltros ? 'primary' : ''}">Filtros${nFiltros ? ` (${nFiltros})` : ''} ▾</summary>
+            <div class="filtros-panel">
+              <div><b>Canal</b>${CANALES.map(c => `<label class="row"><input type="checkbox" data-canal="${c}" ${!state.canales || state.canales.includes(c) ? 'checked' : ''}> ${iconoCanal(c)} ${c}</label>`).join('')}</div>
+              <div><b>Pago</b><label class="row"><input type="checkbox" id="porConfirmar" ${state.porConfirmar ? 'checked' : ''}> Solo por confirmar</label></div>
+              <div><b>Boletas/facturas</b>${[['por emitir', 'Por emitir'], ['emitida', 'Emitidas']].map(([k, n]) => `<label class="row"><input type="checkbox" data-docestado="${k}" ${state.docEstados?.includes(k) ? 'checked' : ''}> ${n}</label>`).join('')}</div>
+              <div><b>Documento</b>${DOCUMENTOS.map(t => `<label class="row"><input type="checkbox" data-doctipo="${t}" ${!state.docTipos || state.docTipos.includes(t) ? 'checked' : ''}> ${t}</label>`).join('')}</div>
+              <div class="row"><button class="btn small" id="filtrosLimpiar" ${nFiltros ? '' : 'disabled'}>Quitar filtros</button></div>
+            </div></details></div>
         <div class="muted">${list.length} venta(s) · ${clp(total)} cobrado${nPend ? ` · <b>${nPend} pendiente(s) de pago</b>` : ''}</div>
         <div class="table-wrap"><table>
           <tr><th>Fecha</th><th>Folio</th><th>Cliente</th><th>Canal</th><th>Entrega</th><th>Pago</th><th>Documento</th><th class="right">Total</th></tr>
@@ -342,7 +356,7 @@ const App = (() => {
             <td>${new Date(v.fecha).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' })}</td>
             <td>${esc(v.folio)} ${estadoPill(v)}</td>
             <td>${esc(cliente(v.clienteId)?.nombre || '—')}</td>
-            <td>${esc(canalDe(v) || '—')}</td>
+            <td>${iconoCanal(canalDe(v))}</td>
             <td>${v.envio?.tipo === 'despacho' ? `${esc(v.envio.empresa)}${v.envio.pago ? ' · ' + esc(v.envio.pago) : ''}<br><span class="pill ${v.envio.estado === 'Entregado' ? 'ok' : v.envio.estado === 'Enviado' ? '' : 'warn'}">${esc(v.envio.estado)}</span>` : 'Retiro'}</td>
             <td>${esc(v.medioPago)}${v.estado === 'anulada' ? '' : `<label class="row pago-check" style="margin:4px 0 0;color:var(--ink)"><input type="checkbox" data-pagado="${v.id}" ${pagoConfirmado(v) ? 'checked' : ''}> Pagado</label>`}</td>
             <td>${esc(v.documento?.tipo || '')}${v.documento?.estado === 'por emitir' && v.estado !== 'anulada' ? '<br><span class="pill warn">Por emitir</span>' : v.documento?.numero ? `<div class="muted">N° ${esc(v.documento.numero)}</div>` : ''}</td>
@@ -620,6 +634,20 @@ const App = (() => {
         state.docTipos = sel.length === DOCUMENTOS.length ? null : sel; render();
       });
       $$('[data-venta]', root).forEach(r => r.onclick = e => { if (!e.target.closest('.pago-check')) openVenta(r.dataset.venta); });
+      const fl = $('#filtros', root);
+      fl.ontoggle = () => { state.filtrosOpen = fl.open; };
+      $$('[data-canal]', root).forEach(i => i.onchange = () => {
+        const sel = $$('[data-canal]', root).filter(x => x.checked).map(x => x.dataset.canal);
+        state.canales = sel.length === CANALES.length ? null : sel; render();
+      });
+      $('#filtrosLimpiar', root).onclick = () => { state.canales = state.docEstados = state.docTipos = null; state.porConfirmar = false; render(); };
+      if (!state.filtrosCierre) {
+        state.filtrosCierre = true;
+        document.addEventListener('pointerdown', e => {
+          const d = $('#filtros');
+          if (d && d.open && !d.contains(e.target)) { d.open = false; state.filtrosOpen = false; }
+        });
+      }
       $('#porConfirmar', root).onchange = e => { state.porConfirmar = e.target.checked; render(); };
       $$('[data-pagado]', root).forEach(i => i.onchange = async () => {
         const v = DB.get('ventas', i.dataset.pagado);

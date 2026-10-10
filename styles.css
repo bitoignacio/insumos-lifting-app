@@ -145,3 +145,13 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--brand-soft);
 }
 table.ficha th { width: 95px; font-weight: 600; color: var(--muted); font-size: .85rem; }
 table.ficha td, table.ficha th { padding: 5px 6px; }
+/* Filtros de Ventas */
+.filtros { position: relative; }
+.filtros > summary { list-style: none; }
+.filtros > summary::-webkit-details-marker { display: none; }
+.filtros-panel { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; width: 260px; max-height: 70vh; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow), 0 8px 24px rgba(0,0,0,.12);
+  padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.filtros-panel label { margin: 4px 0 0; color: var(--ink); font-size: .92rem; flex-wrap: nowrap; }
+.canal { display: inline-flex; vertical-align: middle; }
+.canal svg { display: block; }
