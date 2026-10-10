@@ -17,6 +17,9 @@ const App = (() => {
     "Libertador General Bernardo O'Higgins", 'Maule', 'Ñuble', 'Biobío', 'La Araucanía', 'Los Ríos', 'Los Lagos',
     'Aysén del General Carlos Ibáñez del Campo', 'Magallanes y de la Antártica Chilena'];
   const ORIGENES = ['RRSS', 'Web', 'WhatsApp', 'Otro'];
+  const CANALES = ['RRSS', 'Web', 'WhatsApp', 'Presencial', 'Otro'];
+  // Canal de la venta: el elegido en la venta o, si no, el origen del cliente.
+  const canalDe = v => v.canal || cliente(v.clienteId)?.origen || '';
   const DOCUMENTOS = ['Boleta', 'Factura', 'Sin documento'];
   const ESTADOS_ENVIO = ['Por preparar', 'Listo para enviar', 'Enviado', 'Entregado'];
 
@@ -68,7 +71,7 @@ const App = (() => {
   // ---------- Carrito ----------
   function emptyCart() {
     return { lines: [], descTipo: '%', descValor: 0, entrega: 'retiro', empresa: EMPRESAS_ENVIO[0], envioPago: 'Pagado', envioCosto: 0,
-      clienteId: null, medioPago: MEDIOS_PAGO[0], documento: DOCUMENTOS[0], factura: { razonSocial: '', rut: '', giro: '' }, nota: '', prueba: false };
+      clienteId: null, medioPago: MEDIOS_PAGO[0], documento: DOCUMENTOS[0], factura: { razonSocial: '', rut: '', giro: '' }, nota: '', prueba: false, canal: '' };
   }
   function loadCart() { try { return { ...emptyCart(), ...JSON.parse(localStorage.getItem('carrito') || '{}') }; } catch { return emptyCart(); } }
   function saveCart() { try { localStorage.setItem('carrito', JSON.stringify(cart)); } catch {} }
@@ -126,6 +129,7 @@ const App = (() => {
     const venta = {
       id, folio: folio('V'), fecha, usuario: config.usuario || '', clienteId: cart.clienteId,
       items, subtotal: t.subtotal, descuento: t.descuento, total: t.total, medioPago: cart.medioPago,
+      canal: cart.canal || cliente(cart.clienteId)?.origen || CANALES[0],
       // Solo informativo: la boleta o factura se emite a mano en el SII y aquí se anota el número.
       documento: { tipo: cart.documento, estado: cart.documento === 'Sin documento' ? 'no aplica' : 'por emitir', numero: '',
         ...(cart.documento === 'Factura' ? { razonSocial: fac.razonSocial.trim(), rut: rutFormato(fac.rut), giro: (fac.giro || '').trim() } : {}) },
@@ -289,6 +293,7 @@ const App = (() => {
               ${cli ? '<button class="icon" id="clearCliente" aria-label="Quitar cliente">✕</button>' : ''}
             </div>
           </div>
+          <div><label>Canal de venta</label><select id="canal">${CANALES.map(m => `<option ${(cart.canal || cli?.origen || CANALES[0]) === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
           <div class="grid2">
             <div><label>Medio de pago</label><select id="medioPago">${MEDIOS_PAGO.map(m => `<option ${cart.medioPago === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
             <div><label>Documento (se emite en el SII)</label><select id="documento">${DOCUMENTOS.map(m => `<option ${cart.documento === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
@@ -332,15 +337,16 @@ const App = (() => {
         <div class="row"><span class="muted">Documento:</span>${DOCUMENTOS.map(t => `<label class="row" style="margin:0"><input type="checkbox" data-doctipo="${t}" ${!state.docTipos || state.docTipos.includes(t) ? 'checked' : ''}> ${t}</label>`).join('')}</div>
         <div class="muted">${list.length} venta(s) · ${clp(total)} cobrado${nPend ? ` · <b>${nPend} pendiente(s) de pago</b>` : ''}</div>
         <div class="table-wrap"><table>
-          <tr><th>Fecha</th><th>Folio</th><th>Cliente</th><th>Entrega</th><th>Pago</th><th>Documento</th><th class="right">Total</th></tr>
+          <tr><th>Fecha</th><th>Folio</th><th>Cliente</th><th>Canal</th><th>Entrega</th><th>Pago</th><th>Documento</th><th class="right">Total</th></tr>
           ${list.map(v => `<tr class="click" data-venta="${v.id}">
             <td>${new Date(v.fecha).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' })}</td>
             <td>${esc(v.folio)} ${estadoPill(v)}</td>
             <td>${esc(cliente(v.clienteId)?.nombre || '—')}</td>
-            <td>${v.envio?.tipo === 'despacho' ? `${esc(v.envio.empresa)}${v.envio.pago ? ' · ' + esc(v.envio.pago) : ''} <span class="pill ${v.envio.estado === 'Entregado' ? 'ok' : v.envio.estado === 'Enviado' ? '' : 'warn'}">${esc(v.envio.estado)}</span>` : 'Retiro'}</td>
+            <td>${esc(canalDe(v) || '—')}</td>
+            <td>${v.envio?.tipo === 'despacho' ? `${esc(v.envio.empresa)}${v.envio.pago ? ' · ' + esc(v.envio.pago) : ''}<br><span class="pill ${v.envio.estado === 'Entregado' ? 'ok' : v.envio.estado === 'Enviado' ? '' : 'warn'}">${esc(v.envio.estado)}</span>` : 'Retiro'}</td>
             <td>${esc(v.medioPago)}${v.estado === 'anulada' ? '' : `<label class="row pago-check" style="margin:4px 0 0;color:var(--ink)"><input type="checkbox" data-pagado="${v.id}" ${pagoConfirmado(v) ? 'checked' : ''}> Pagado</label>`}</td>
             <td>${esc(v.documento?.tipo || '')} ${v.documento?.estado === 'por emitir' && v.estado !== 'anulada' ? '<span class="pill warn">Por emitir</span>' : esc(v.documento?.numero ? 'N° ' + v.documento.numero : '')}${v.documento?.razonSocial ? `<div class="muted">${esc(v.documento.razonSocial)} · ${esc(v.documento.rut || '')}</div>` : ''}</td>
-            <td class="right num">${clp(v.total)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No hay ventas en este periodo.</td></tr>'}
+            <td class="right num">${clp(v.total)}</td></tr>`).join('') || '<tr><td colspan="8" class="empty">No hay ventas en este periodo.</td></tr>'}
         </table></div></div>`;
     },
 
@@ -428,7 +434,7 @@ const App = (() => {
       for (const v of ventas) {
         envios += v.envio?.costo || 0;
         porPago[v.medioPago] = (porPago[v.medioPago] || 0) + v.total;
-        const o = cliente(v.clienteId)?.origen || 'Sin cliente';
+        const o = canalDe(v) || 'Sin dato';
         porOrigen[o] = (porOrigen[o] || 0) + 1;
         for (const it of v.items) {
           const venta = it.total - (it.descuento - (it.precio * it.cantidad - it.total));
@@ -451,7 +457,7 @@ const App = (() => {
         </div>
         <div class="grid2">
           ${box('Por medio de pago', porPago)}
-          ${box('Ventas por origen del cliente', porOrigen)}
+          ${box('Ventas por canal', porOrigen)}
           <div class="card"><h3>Más vendidos</h3><table>${top.map(([k, d]) => `<tr><td>${esc(k)}</td><td class="right num">${d.u} u.</td><td class="right num">${clp(d.monto)}</td></tr>`).join('') || '<tr><td class="muted">Sin datos</td></tr>'}</table></div>
           <div class="card"><h3>Stock bajo (${bajos.length})</h3><table>${bajos.slice(0, 15).map(v => `<tr><td>${esc(nombreVariante(v))}</td><td class="right"><span class="pill low">${stockOf(v.id)}</span></td></tr>`).join('') || '<tr><td class="muted">Todo en orden</td></tr>'}</table></div>
         </div></div>`;
@@ -587,7 +593,7 @@ const App = (() => {
       $$('[data-envpago]', root).forEach(b => b.onclick = () => { cart.envioPago = b.dataset.envpago; saveCart(); render(); });
       const change = (id, key, fn = x => x) => { const el = $('#' + id, root); if (el) el.onchange = () => { cart[key] = fn(el.value); saveCart(); render(); }; };
       change('descValor', 'descValor', num); change('envioCosto', 'envioCosto', int);
-      change('empresa', 'empresa'); change('medioPago', 'medioPago'); change('documento', 'documento', x => { cart.documento = x; prellenarFactura(); return x; });
+      change('empresa', 'empresa'); change('medioPago', 'medioPago'); change('canal', 'canal'); change('documento', 'documento', x => { cart.documento = x; prellenarFactura(); return x; });
       [['facRazon', 'razonSocial'], ['facRut', 'rut'], ['facGiro', 'giro']].forEach(([id, k]) => {
         const el = $('#' + id, root);
         if (el) el.oninput = () => { cart.factura = { ...(cart.factura || {}), [k]: el.value }; saveCart(); };
