@@ -345,7 +345,7 @@ const App = (() => {
             <td>${esc(canalDe(v) || '—')}</td>
             <td>${v.envio?.tipo === 'despacho' ? `${esc(v.envio.empresa)}${v.envio.pago ? ' · ' + esc(v.envio.pago) : ''}<br><span class="pill ${v.envio.estado === 'Entregado' ? 'ok' : v.envio.estado === 'Enviado' ? '' : 'warn'}">${esc(v.envio.estado)}</span>` : 'Retiro'}</td>
             <td>${esc(v.medioPago)}${v.estado === 'anulada' ? '' : `<label class="row pago-check" style="margin:4px 0 0;color:var(--ink)"><input type="checkbox" data-pagado="${v.id}" ${pagoConfirmado(v) ? 'checked' : ''}> Pagado</label>`}</td>
-            <td>${esc(v.documento?.tipo || '')} ${v.documento?.estado === 'por emitir' && v.estado !== 'anulada' ? '<span class="pill warn">Por emitir</span>' : esc(v.documento?.numero ? 'N° ' + v.documento.numero : '')}${v.documento?.razonSocial ? `<div class="muted">${esc(v.documento.razonSocial)} · ${esc(v.documento.rut || '')}</div>` : ''}</td>
+            <td>${esc(v.documento?.tipo || '')}${v.documento?.estado === 'por emitir' && v.estado !== 'anulada' ? '<br><span class="pill warn">Por emitir</span>' : v.documento?.numero ? `<div class="muted">N° ${esc(v.documento.numero)}</div>` : ''}</td>
             <td class="right num">${clp(v.total)}</td></tr>`).join('') || '<tr><td colspan="8" class="empty">No hay ventas en este periodo.</td></tr>'}
         </table></div></div>`;
     },
