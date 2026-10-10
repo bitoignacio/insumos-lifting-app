@@ -28,7 +28,9 @@ const App = (() => {
     Presencial: '<svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="11" fill="#b0476b"/><g fill="none" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"><path d="M6.5 10.5h11V17h-11z"/><path d="M5.8 10.5 7 7h10l1.2 3.5"/><path d="M10.5 17v-3.5h3V17"/></g></svg>',
     Otro: '<svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="11" fill="#9ca3af"/><g fill="#fff"><circle cx="7.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="16.5" cy="12" r="1.6"/></g></svg>',
   };
-  const iconoCanal = c => c ? `<span class="canal" title="${esc(c)}" aria-label="${esc(c)}">${ICONOS_CANAL[c] || esc(c)}</span>` : '—';
+  // Cada ícono de Instagram lleva su propio id de degradado: si se repite y el primero está oculto (en el menú de filtros cerrado), el resto se ve blanco.
+  let nIcono = 0;
+  const iconoCanal = c => c ? `<span class="canal" title="${esc(c)}" aria-label="${esc(c)}">${(ICONOS_CANAL[c] || esc(c)).replace(/igc/g, 'igc' + (++nIcono))}</span>` : '—';
   const DOCUMENTOS = ['Boleta', 'Factura', 'Sin documento'];
   const ESTADOS_ENVIO = ['Por preparar', 'Listo para enviar', 'Enviado', 'Entregado'];
 
