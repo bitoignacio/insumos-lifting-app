@@ -17,12 +17,13 @@ const App = (() => {
     "Libertador General Bernardo O'Higgins", 'Maule', 'Ñuble', 'Biobío', 'La Araucanía', 'Los Ríos', 'Los Lagos',
     'Aysén del General Carlos Ibáñez del Campo', 'Magallanes y de la Antártica Chilena'];
   const ORIGENES = ['RRSS', 'Web', 'WhatsApp', 'Otro'];
-  const CANALES = ['RRSS', 'Web', 'WhatsApp', 'Presencial', 'Otro'];
-  // Canal de la venta: el elegido en la venta o, si no, el origen del cliente.
-  const canalDe = v => v.canal || cliente(v.clienteId)?.origen || '';
+  const CANALES = ['Instagram', 'Web', 'WhatsApp', 'Presencial', 'Otro'];
+  // Canal de la venta: el elegido en la venta o, si no, el origen del cliente. "RRSS" (datos antiguos y origen del cliente) se muestra como Instagram.
+  const canalNorm = c => c === 'RRSS' ? 'Instagram' : c || '';
+  const canalDe = v => canalNorm(v.canal || cliente(v.clienteId)?.origen);
   const ICONOS_CANAL = {
     WhatsApp: '<svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="11" fill="#25D366"/><path fill="#fff" d="M16.6 13.9c-.2-.1-1.4-.7-1.6-.8-.2-.1-.4-.1-.5.1l-.7.9c-.1.2-.3.2-.5.1-.7-.3-1.9-1-2.8-2.4-.2-.3.2-.3.6-1 .1-.2 0-.3 0-.4l-.7-1.7c-.2-.4-.4-.4-.5-.4h-.5c-.2 0-.4.1-.6.3-.2.2-.8.8-.8 1.9s.8 2.2.9 2.4c.1.1 1.6 2.5 4 3.5 1.5.6 2 .7 2.8.6.5-.1 1.4-.6 1.6-1.1.2-.5.2-1 .1-1.1 0-.1-.2-.2-.4-.3z"/><path fill="none" stroke="#fff" stroke-width="1.4" d="M6.3 17.8l.8-2.8a6.6 6.6 0 1 1 2.5 2.3z"/></svg>',
-    RRSS: '<svg viewBox="0 0 24 24" width="22" height="22"><defs><linearGradient id="igc" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#FEDA75"/><stop offset=".4" stop-color="#FA7E1E"/><stop offset=".7" stop-color="#D62976"/><stop offset="1" stop-color="#4F5BD5"/></linearGradient></defs><rect x="1" y="1" width="22" height="22" rx="6" fill="url(#igc)"/><rect x="6" y="6" width="12" height="12" rx="3.5" fill="none" stroke="#fff" stroke-width="1.8"/><circle cx="12" cy="12" r="2.8" fill="none" stroke="#fff" stroke-width="1.8"/><circle cx="16.3" cy="7.7" r="1" fill="#fff"/></svg>',
+    Instagram: '<svg viewBox="0 0 24 24" width="22" height="22"><defs><linearGradient id="igc" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#FEDA75"/><stop offset=".4" stop-color="#FA7E1E"/><stop offset=".7" stop-color="#D62976"/><stop offset="1" stop-color="#4F5BD5"/></linearGradient></defs><rect x="1" y="1" width="22" height="22" rx="6" fill="url(#igc)"/><rect x="6" y="6" width="12" height="12" rx="3.5" fill="none" stroke="#fff" stroke-width="1.8"/><circle cx="12" cy="12" r="2.8" fill="none" stroke="#fff" stroke-width="1.8"/><circle cx="16.3" cy="7.7" r="1" fill="#fff"/></svg>',
     Web: '<svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="11" fill="#3b82f6"/><g fill="none" stroke="#fff" stroke-width="1.4"><circle cx="12" cy="12" r="6.5"/><ellipse cx="12" cy="12" rx="2.8" ry="6.5"/><path d="M5.5 12h13M6.5 8.8h11M6.5 15.2h11"/></g></svg>',
     Presencial: '<svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="11" fill="#b0476b"/><g fill="none" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"><path d="M6.5 10.5h11V17h-11z"/><path d="M5.8 10.5 7 7h10l1.2 3.5"/><path d="M10.5 17v-3.5h3V17"/></g></svg>',
     Otro: '<svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="11" fill="#9ca3af"/><g fill="#fff"><circle cx="7.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="16.5" cy="12" r="1.6"/></g></svg>',
@@ -32,7 +33,8 @@ const App = (() => {
   const ESTADOS_ENVIO = ['Por preparar', 'Listo para enviar', 'Enviado', 'Entregado'];
 
   let config = {};
-  let view = 'vender';
+  // Al recargar la página vuelve a la misma pantalla y posición (se guarda solo mientras la pestaña esté abierta).
+  let view = (() => { try { return sessionStorage.getItem('vista') || 'vender'; } catch { return 'vender'; } })();
   let stock = new Map();
   let search = '';
   let cart = loadCart();
@@ -137,7 +139,7 @@ const App = (() => {
     const venta = {
       id, folio: folio('V'), fecha, usuario: config.usuario || '', clienteId: cart.clienteId,
       items, subtotal: t.subtotal, descuento: t.descuento, total: t.total, medioPago: cart.medioPago,
-      canal: cart.canal || cliente(cart.clienteId)?.origen || CANALES[0],
+      canal: cart.canal || canalNorm(cliente(cart.clienteId)?.origen) || CANALES[0],
       // Solo informativo: la boleta o factura se emite a mano en el SII y aquí se anota el número.
       documento: { tipo: cart.documento, estado: cart.documento === 'Sin documento' ? 'no aplica' : 'por emitir', numero: '',
         ...(cart.documento === 'Factura' ? { razonSocial: fac.razonSocial.trim(), rut: rutFormato(fac.rut), giro: (fac.giro || '').trim() } : {}) },
@@ -301,7 +303,7 @@ const App = (() => {
               ${cli ? '<button class="icon" id="clearCliente" aria-label="Quitar cliente">✕</button>' : ''}
             </div>
           </div>
-          <div><label>Canal de venta</label><select id="canal">${CANALES.map(m => `<option ${(cart.canal || cli?.origen || CANALES[0]) === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
+          <div><label>Canal de venta</label><select id="canal">${CANALES.map(m => `<option ${(cart.canal || canalNorm(cli?.origen) || CANALES[0]) === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
           <div class="grid2">
             <div><label>Medio de pago</label><select id="medioPago">${MEDIOS_PAGO.map(m => `<option ${cart.medioPago === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
             <div><label>Documento (se emite en el SII)</label><select id="documento">${DOCUMENTOS.map(m => `<option ${cart.documento === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
@@ -1322,7 +1324,12 @@ const App = (() => {
       b.title = s.state === 'ok' ? 'Sincronizado con la planilla' : (s.error || 'Sin sincronizar') + (s.pending ? ` (${s.pending} en cola)` : '');
       if (view === 'ajustes' && !$('#modal').hidden === false && !document.activeElement.matches('input,textarea')) render();
     });
+    if (!views[view]) view = 'vender';
+    let scrollGuardado = 0;
+    try { scrollGuardado = +sessionStorage.getItem('scroll') || 0; } catch {}
+    addEventListener('pagehide', () => { try { sessionStorage.setItem('vista', view); sessionStorage.setItem('scroll', String(scrollY)); } catch {} });
     render();
+    if (scrollGuardado) setTimeout(() => window.scrollTo(0, scrollGuardado), 50);
     Sync.run();
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       // Busca versiones nuevas al abrir o volver a la app y recarga sola cuando hay una (el carrito queda guardado).
