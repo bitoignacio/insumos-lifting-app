@@ -208,7 +208,12 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--brand-soft);
 .cart-foot .prueba input { width: 15px; height: 15px; }
 /* En computador el recuadro de venta tiene su propio scroll y el total con el botón quedan siempre a la vista. */
 @media (min-width: 901px) {
-  .cart { top: 22px; max-height: calc(100vh - 44px); overflow-y: auto; overscroll-behavior: contain; }
+  .cart { top: 22px; height: calc(100vh - 44px); height: calc(100dvh - 44px); overflow-y: auto; overscroll-behavior: contain;
+    display: flex; flex-direction: column; }
+  .cart > * { flex-shrink: 0; }
+  /* El paso 1 crece y ocupa el espacio libre; los demás pasos y el total quedan abajo. */
+  .cart > .blk:first-of-type { flex-grow: 1; }
+  .cart-foot { margin-top: auto; }
   .cart-foot { position: sticky; bottom: 0; z-index: 2; background: var(--foot); box-shadow: 0 -12px 24px -18px rgba(60,20,50,.35); }
 }
 @media (max-width: 900px) { .cart { position: static; } }
