@@ -253,6 +253,7 @@ const App = (() => {
         variantesDe(p.id).map(v => v.nombre + ' ' + (v.sku || '')).join(' '), search));
       return `<div class="pos ${search.trim() ? 'buscando' : ''}">
         <section>
+          <div class="page-head"><div><h1>Vender</h1><p class="muted sub">Busca un producto o tócalo para agregarlo</p></div></div>
           <input id="search" type="search" placeholder="Buscar producto, color, medida o código…" value="${esc(search)}" autocomplete="off">
           <div class="muted solo-movil">Escribe el nombre del producto para agregarlo a la venta.</div>
           <div class="products">
@@ -263,14 +264,15 @@ const App = (() => {
               const min = Math.min(...precios), max = Math.max(...precios);
               return `<button class="prod ${total <= 0 ? 'out' : ''}" data-prod="${p.id}">
                 <span class="name">${esc(p.nombre)}</span>
-                <span class="muted">${vs.length > 1 ? vs.length + ' opciones · ' : ''}stock ${total}</span>
-                <span class="price">${vs.length ? (min === max ? clp(min) : clp(min) + ' – ' + clp(max)) : '—'}</span>
+                ${vs.length > 1 ? `<span class="muted">${vs.length} opciones</span>` : ''}
+                <span class="prod-foot"><span class="price">${vs.length ? (min === max ? clp(min) : clp(min) + ' – ' + clp(max)) : '—'}</span><span class="stk ${total <= 0 ? 'out' : total <= (p.stockMin ?? 0) ? 'low' : ''}">${total} un.</span></span>
               </button>`;
             }).join('') || `<div class="empty">${DB.all('productos').length ? 'Sin resultados.' : 'Aún no hay productos. Agrégalos en Inventario o impórtalos en Ajustes.'}</div>`}
           </div>
         </section>
-        <aside class="card cart stack">
-          <h2>Venta actual</h2>
+        <aside class="card cart">
+          <div class="cart-h"><h2>Venta actual</h2>${cart.lines.length ? `<span class="count">${cart.lines.reduce((s, l) => s + (+l.cantidad || 0), 0)} un.</span>` : ''}</div>
+          <section class="blk"><div class="blk-t"><em>1</em>Productos</div>
           <div>
             ${cart.lines.map((l, i) => {
               const v = variante(l.varianteId); const lt = lineTotals(l);
@@ -287,16 +289,8 @@ const App = (() => {
             <div class="seg">${['%', '$'].map(x => `<button data-desctipo="${x}" class="${cart.descTipo === x ? 'on' : ''}">${x}</button>`).join('')}</div>
             <input id="descValor" style="width:90px" inputmode="numeric" value="${cart.descValor || ''}" placeholder="0">
           </div>
-          <div>
-            <label>Entrega</label>
-            <div class="seg">${[['retiro', 'Retiro / en mano'], ['despacho', 'Despacho']].map(([k, n]) => `<button data-entrega="${k}" class="${cart.entrega === k ? 'on' : ''}">${n}</button>`).join('')}</div>
-          </div>
-          ${cart.entrega === 'despacho' ? `<div class="grid2">
-            <div><label>Empresa</label><select id="empresa">${EMPRESAS_ENVIO.map(e => `<option ${cart.empresa === e ? 'selected' : ''}>${e}</option>`).join('')}</select></div>
-            ${CON_PAGO_ENVIO.includes(cart.empresa) ? `<div><label>Envío</label><div class="seg">${['Pagado', 'Por pagar'].map(x => `<button data-envpago="${x}" class="${cart.envioPago === x ? 'on' : ''}">${x}</button>`).join('')}</div></div>` : ''}
-            ${envioPorPagar() ? '<div class="muted" style="align-self:center">El cliente paga el envío al recibir.</div>'
-              : `<div><label>Costo envío (se cobra al cliente)</label><input id="envioCosto" inputmode="numeric" value="${cart.envioCosto || ''}" placeholder="0"></div>`}
-          </div>` : ''}
+          </section>
+          <section class="blk"><div class="blk-t"><em>2</em>Cliente y canal</div>
           <div>
             <label>Cliente ${cart.entrega === 'despacho' ? '(obligatorio para despacho)' : '(opcional)'}</label>
             <div class="row">
@@ -306,6 +300,19 @@ const App = (() => {
             </div>
           </div>
           <div><label>Canal de venta</label><select id="canal">${CANALES.map(m => `<option ${(cart.canal || canalNorm(cli?.origen) || CANALES[0]) === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
+          </section>
+          <section class="blk"><div class="blk-t"><em>3</em>Entrega</div>
+          <div>
+            <div class="seg">${[['retiro', 'Retiro / en mano'], ['despacho', 'Despacho']].map(([k, n]) => `<button data-entrega="${k}" class="${cart.entrega === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+          </div>
+          ${cart.entrega === 'despacho' ? `<div class="grid2">
+            <div><label>Empresa</label><select id="empresa">${EMPRESAS_ENVIO.map(e => `<option ${cart.empresa === e ? 'selected' : ''}>${e}</option>`).join('')}</select></div>
+            ${CON_PAGO_ENVIO.includes(cart.empresa) ? `<div><label>Envío</label><div class="seg">${['Pagado', 'Por pagar'].map(x => `<button data-envpago="${x}" class="${cart.envioPago === x ? 'on' : ''}">${x}</button>`).join('')}</div></div>` : ''}
+            ${envioPorPagar() ? '<div class="muted" style="align-self:center">El cliente paga el envío al recibir.</div>'
+              : `<div><label>Costo envío (se cobra al cliente)</label><input id="envioCosto" inputmode="numeric" value="${cart.envioCosto || ''}" placeholder="0"></div>`}
+          </div>` : ''}
+          </section>
+          <section class="blk"><div class="blk-t"><em>4</em>Pago y documento</div>
           <div class="grid2">
             <div><label>Medio de pago</label><select id="medioPago">${MEDIOS_PAGO.map(m => `<option ${cart.medioPago === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
             <div><label>Documento (se emite en el SII)</label><select id="documento">${DOCUMENTOS.map(m => `<option ${cart.documento === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
@@ -314,6 +321,7 @@ const App = (() => {
             <div class="grid2"><div><label>Razón social *</label><input id="facRazon" value="${esc(cart.factura?.razonSocial || '')}"></div>
               <div><label>RUT *</label><input id="facRut" value="${esc(cart.factura?.rut || '')}" placeholder="12.345.678-9"></div></div>
             <div><label>Giro (opcional)</label><input id="facGiro" value="${esc(cart.factura?.giro || '')}"></div></div>` : ''}
+          </section>
           <div class="cart-foot"><div class="totals num">
             <div><span>Subtotal</span><span>${clp(t.subtotal)}</span></div>
             ${t.descuento ? `<div><span>Descuento</span><span>-${clp(t.descuento)}</span></div>` : ''}
@@ -332,7 +340,15 @@ const App = (() => {
     ventas() {
       const periodo = state.ventasPeriodo || '7';
       const rango = periodoRango('ventasPeriodo');
-      const list = DB.all('ventas').filter(v => enRango(v.fecha, rango))
+      const enPeriodo = DB.all('ventas').filter(v => enRango(v.fecha, rango));
+      const vigentes = enPeriodo.filter(v => v.estado !== 'anulada');
+      const cobradas = vs => vs.filter(v => v.estado === 'completada' && !v.prueba);
+      const hoy = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
+      const deHoy = cobradas(DB.all('ventas').filter(v => v.fecha >= hoy));
+      const kPeriodo = cobradas(vigentes);
+      const nConfirmar = vigentes.filter(v => !pagoConfirmado(v)).length;
+      const nEmitir = vigentes.filter(v => v.documento?.estado === 'por emitir').length;
+      const list = enPeriodo
         .filter(v => match([v.folio, cliente(v.clienteId)?.nombre, v.documento?.numero, v.documento?.razonSocial, v.documento?.rut, ...v.items.map(i => i.nombre)].join(' '), state.ventasQ || ''))
         .filter(v => !state.docEstados || (state.docEstados.includes(v.documento?.estado) && v.estado !== 'anulada'))
         .filter(v => !state.docTipos || state.docTipos.includes(v.documento?.tipo || 'Sin documento'))
@@ -342,8 +358,15 @@ const App = (() => {
       const total = list.filter(v => v.estado === 'completada' && !v.prueba).reduce((s, v) => s + v.total, 0);
       const nPend = list.filter(v => v.estado === 'pendiente').length;
       const nFiltros = [state.canales, state.porConfirmar, state.docEstados, state.docTipos].filter(Boolean).length;
-      return `<div class="card stack">
-        <div class="row"><h2 class="grow">Ventas</h2>${periodoSelect('ventasPeriodo', periodo)}</div>
+      return `<div class="stack">
+        <div class="page-head"><h1>Ventas</h1>${periodoSelect('ventasPeriodo', periodo)}</div>
+        <div class="kpis">
+          <div class="card kpi"><div class="k">Vendido hoy</div><div class="v num">${clp(deHoy.reduce((s, v) => s + v.total, 0))}</div><div class="muted">${deHoy.length} venta(s)</div></div>
+          <div class="card kpi"><div class="k">En el periodo</div><div class="v num">${clp(kPeriodo.reduce((s, v) => s + v.total, 0))}</div><div class="muted">${kPeriodo.length} venta(s)</div></div>
+          <button class="card kpi ${state.porConfirmar ? 'on' : ''}" id="kpiConfirmar"><div class="k">Pagos por confirmar</div><div class="v num">${nConfirmar}</div><div class="${nConfirmar ? 'warn' : 'muted'}">${nConfirmar ? 'Toca para verlos' : 'Todo al día'}</div></button>
+          <button class="card kpi ${state.docEstados?.length === 1 && state.docEstados[0] === 'por emitir' ? 'on' : ''}" id="kpiEmitir"><div class="k">Documentos por emitir</div><div class="v num">${nEmitir}</div><div class="${nEmitir ? 'warn' : 'muted'}">${nEmitir ? 'Toca para verlos' : 'Todo al día'}</div></button>
+        </div>
+        <div class="card stack">
         <div class="row"><input class="grow" id="ventasQ" type="search" placeholder="Buscar por folio, cliente, producto o N° de boleta…" value="${esc(state.ventasQ || '')}">
           <details class="filtros" id="filtros" ${state.filtrosOpen ? 'open' : ''}><summary class="btn ${nFiltros ? 'primary' : ''}">Filtros${nFiltros ? ` (${nFiltros})` : ''} ▾</summary>
             <div class="filtros-panel">
@@ -365,7 +388,7 @@ const App = (() => {
             <td>${esc(v.medioPago)}${v.estado === 'anulada' ? '' : `<label class="row pago-check" style="margin:4px 0 0;color:var(--ink)"><input type="checkbox" data-pagado="${v.id}" ${pagoConfirmado(v) ? 'checked' : ''}> Pagado</label>`}</td>
             <td>${esc(v.documento?.tipo || '')}${v.documento?.estado === 'por emitir' && v.estado !== 'anulada' ? '<br><span class="pill warn">Por emitir</span>' : v.documento?.numero ? `<div class="muted">N° ${esc(v.documento.numero)}</div>` : ''}</td>
             <td class="right num">${clp(v.total)}</td></tr>`).join('') || '<tr><td colspan="8" class="empty">No hay ventas en este periodo.</td></tr>'}
-        </table></div></div>`;
+        </table></div></div></div>`;
     },
 
     inventario() {
@@ -653,6 +676,8 @@ const App = (() => {
         });
       }
       $('#porConfirmar', root).onchange = e => { state.porConfirmar = e.target.checked; render(); };
+      $('#kpiConfirmar', root).onclick = () => { state.porConfirmar = !state.porConfirmar; render(); };
+      $('#kpiEmitir', root).onclick = () => { const on = state.docEstados?.length === 1 && state.docEstados[0] === 'por emitir'; state.docEstados = on ? null : ['por emitir']; render(); };
       $$('[data-pagado]', root).forEach(i => i.onchange = async () => {
         const v = DB.get('ventas', i.dataset.pagado);
         if (!i.checked && !confirm(`¿Marcar el pago de ${v.folio} como no confirmado?`)) { i.checked = true; return; }
@@ -1323,6 +1348,7 @@ const App = (() => {
     Sync.onChange(s => {
       const b = $('#syncBadge');
       b.className = 'sync ' + s.state;
+      $('#syncTxt').textContent = s.state === 'ok' ? 'Sincronizado' : s.state === 'off' ? 'Sin planilla' : !navigator.onLine ? 'Sin internet' : s.pending ? `${s.pending} por subir` : 'Por sincronizar';
       b.title = s.state === 'ok' ? 'Sincronizado con la planilla' : (s.error || 'Sin sincronizar') + (s.pending ? ` (${s.pending} en cola)` : '');
       if (view === 'ajustes' && !$('#modal').hidden === false && !document.activeElement.matches('input,textarea')) render();
     });
