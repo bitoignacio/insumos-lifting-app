@@ -271,40 +271,30 @@ const App = (() => {
           </div>
         </section>
         <aside class="card cart">
-          <div class="cart-h"><h2>Venta actual</h2>${cart.lines.length ? `<span class="count">${cart.lines.reduce((s, l) => s + (+l.cantidad || 0), 0)} un.</span>` : ''}</div>
+          <div class="cart-h"><h2>Venta actual</h2>${cart.lines.length ? `<span class="count">${cart.lines.reduce((s, l) => s + (+l.cantidad || 0), 0)} un.</span><button class="link-btn" id="clearCart">Vaciar</button>` : ''}</div>
           <section class="blk"><div class="blk-t"><em>1</em>Productos</div>
-          <div>
             ${cart.lines.map((l, i) => {
               const v = variante(l.varianteId); const lt = lineTotals(l);
               if (!v) return '';
               return `<div class="cart-line">
-                <div><b>${esc(nombreVariante(v))}</b><div class="muted">${clp(l.precio)} c/u · stock ${stockOf(v.id)}</div></div>
-                <div class="right num"><b>${clp(lt.total)}</b>${lt.desc ? `<div class="muted">-${clp(lt.desc)}</div>` : ''}</div>
-                <div class="qty"><button data-dec="${i}">−</button><input data-qty="${i}" value="${l.cantidad}" inputmode="numeric"><button data-inc="${i}">+</button></div>
-                <div class="row" style="justify-content:flex-end"><button class="btn small" data-linedesc="${i}">Descuento</button><button class="icon" data-del="${i}" aria-label="Quitar">✕</button></div>
+                <div class="cl-name"><b title="${esc(nombreVariante(v))}">${esc(nombreVariante(v))}</b><div class="muted">${clp(l.precio)} c/u · stock ${stockOf(v.id)}${lt.desc ? ` · <span class="warn">-${clp(lt.desc)}</span>` : ''}</div></div>
+                <div class="qty"><button data-dec="${i}" aria-label="Menos">−</button><input data-qty="${i}" value="${l.cantidad}" inputmode="numeric" aria-label="Cantidad"><button data-inc="${i}" aria-label="Más">+</button></div>
+                <div class="cl-tot num"><b>${clp(lt.total)}</b><div><button class="icon mini" data-linedesc="${i}" title="Descuento a este producto" aria-label="Descuento">%</button><button class="icon mini" data-del="${i}" aria-label="Quitar">✕</button></div></div>
               </div>`;
             }).join('') || '<div class="empty">Toca un producto para agregarlo.</div>'}
-          </div>
-          <div class="row"><label class="grow" style="margin:0">Descuento a la venta</label>
-            <div class="seg">${['%', '$'].map(x => `<button data-desctipo="${x}" class="${cart.descTipo === x ? 'on' : ''}">${x}</button>`).join('')}</div>
-            <input id="descValor" style="width:90px" inputmode="numeric" value="${cart.descValor || ''}" placeholder="0">
-          </div>
+            ${cart.lines.length ? `<div class="desc-row"><span class="muted">Descuento a la venta</span>
+              <div class="seg mini">${['%', '$'].map(x => `<button data-desctipo="${x}" class="${cart.descTipo === x ? 'on' : ''}">${x}</button>`).join('')}</div>
+              <input id="descValor" inputmode="numeric" value="${cart.descValor || ''}" placeholder="0" aria-label="Descuento a la venta"></div>` : ''}
           </section>
           <section class="blk"><div class="blk-t"><em>2</em>Cliente y canal</div>
-          <div>
-            <label>Cliente ${cart.entrega === 'despacho' ? '(obligatorio para despacho)' : '(opcional)'}</label>
-            <div class="row">
-              <div class="grow">${cli ? `<b>${esc(cli.nombre)}</b><div class="muted">${esc([cli.comuna, telefonoDe(cli)].filter(Boolean).join(' · '))}</div>` : '<span class="muted">Sin cliente</span>'}</div>
-              <button class="btn small" id="pickCliente">${cli ? 'Cambiar' : 'Elegir'}</button>
-              ${cli ? '<button class="icon" id="clearCliente" aria-label="Quitar cliente">✕</button>' : ''}
+            <div class="duo">
+              <div class="cli-box ${cli ? 'con' : ''}"><button id="pickCliente" class="cli-pick" title="${cli ? 'Cambiar cliente' : 'Elegir cliente'}">${cli ? `<b>${esc(cli.nombre)}</b><span class="muted">${esc([cli.comuna, telefonoDe(cli)].filter(Boolean).join(' · '))}</span>` : `<span class="muted">${cart.entrega === 'despacho' ? 'Elegir cliente (obligatorio)' : 'Elegir cliente'}</span>`}</button>
+                ${cli ? '<button class="icon mini" id="clearCliente" aria-label="Quitar cliente">✕</button>' : ''}</div>
+              <select id="canal" aria-label="Canal de venta" title="Canal de venta">${CANALES.map(m => `<option ${(cart.canal || canalNorm(cli?.origen) || CANALES[0]) === m ? 'selected' : ''}>${m}</option>`).join('')}</select>
             </div>
-          </div>
-          <div><label>Canal de venta</label><select id="canal">${CANALES.map(m => `<option ${(cart.canal || canalNorm(cli?.origen) || CANALES[0]) === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
           </section>
-          <section class="blk"><div class="blk-t"><em>3</em>Entrega</div>
-          <div>
-            <div class="seg">${[['retiro', 'Retiro / en mano'], ['despacho', 'Despacho']].map(([k, n]) => `<button data-entrega="${k}" class="${cart.entrega === k ? 'on' : ''}">${n}</button>`).join('')}</div>
-          </div>
+          <section class="blk"><div class="blk-t"><em>3</em>Entrega
+            <div class="seg mini">${[['retiro', 'Retiro'], ['despacho', 'Despacho']].map(([k, n]) => `<button data-entrega="${k}" class="${cart.entrega === k ? 'on' : ''}">${n}</button>`).join('')}</div></div>
           ${cart.entrega === 'despacho' ? `<div class="grid2">
             <div><label>Empresa</label><select id="empresa">${EMPRESAS_ENVIO.map(e => `<option ${cart.empresa === e ? 'selected' : ''}>${e}</option>`).join('')}</select></div>
             ${CON_PAGO_ENVIO.includes(cart.empresa) ? `<div><label>Envío</label><div class="seg">${['Pagado', 'Por pagar'].map(x => `<button data-envpago="${x}" class="${cart.envioPago === x ? 'on' : ''}">${x}</button>`).join('')}</div></div>` : ''}
@@ -313,26 +303,23 @@ const App = (() => {
           </div>` : ''}
           </section>
           <section class="blk"><div class="blk-t"><em>4</em>Pago y documento</div>
-          <div class="grid2">
-            <div><label>Medio de pago</label><select id="medioPago">${MEDIOS_PAGO.map(m => `<option ${cart.medioPago === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
-            <div><label>Documento (se emite en el SII)</label><select id="documento">${DOCUMENTOS.map(m => `<option ${cart.documento === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
-          </div>
+            <div class="duo">
+              <select id="medioPago" aria-label="Medio de pago" title="Medio de pago">${MEDIOS_PAGO.map(m => `<option ${cart.medioPago === m ? 'selected' : ''}>${m}</option>`).join('')}</select>
+              <select id="documento" aria-label="Documento (se emite en el SII)" title="Documento (se emite en el SII)">${DOCUMENTOS.map(m => `<option ${cart.documento === m ? 'selected' : ''}>${m}</option>`).join('')}</select>
+            </div>
           ${cart.documento === 'Factura' ? `<div class="stack"><b>Datos de la factura</b>
             <div class="grid2"><div><label>Razón social *</label><input id="facRazon" value="${esc(cart.factura?.razonSocial || '')}"></div>
               <div><label>RUT *</label><input id="facRut" value="${esc(cart.factura?.rut || '')}" placeholder="12.345.678-9"></div></div>
             <div><label>Giro (opcional)</label><input id="facGiro" value="${esc(cart.factura?.giro || '')}"></div></div>` : ''}
           </section>
-          <div class="cart-foot"><div class="totals num">
-            <div><span>Subtotal</span><span>${clp(t.subtotal)}</span></div>
-            ${t.descuento ? `<div><span>Descuento</span><span>-${clp(t.descuento)}</span></div>` : ''}
-            ${t.envio ? `<div><span>Envío</span><span>${clp(t.envio)}</span></div>` : ''}
-            <div class="grand"><span>Total</span><span>${clp(t.total)}</span></div>
+          <div class="cart-foot">
+            <div class="totals num">
+              <div class="det">${[`Subtotal ${clp(t.subtotal)}`, t.descuento ? `Descuento -${clp(t.descuento)}` : '', t.envio ? `Envío ${clp(t.envio)}` : ''].filter(Boolean).join(' · ')}</div>
+              <div class="grand"><span>Total</span><span>${clp(t.total)}</span></div>
+            </div>
+            <button class="btn primary" id="checkout" ${cart.lines.length ? '' : 'disabled'}>${cart.medioPago === 'MercadoPago' ? 'Generar link de pago' : 'Registrar venta'}</button>
+            <label class="row prueba"><input type="checkbox" id="prueba" ${cart.prueba ? 'checked' : ''}> Venta de prueba</label>
           </div>
-          <div class="row">
-            <button class="btn" id="clearCart" ${cart.lines.length ? '' : 'disabled'}>Vaciar</button>
-            <button class="btn primary grow" id="checkout" ${cart.lines.length ? '' : 'disabled'}>${cart.medioPago === 'MercadoPago' ? 'Generar link de pago' : 'Registrar venta'}</button>
-          </div>
-          <label class="row" style="margin:0;justify-content:flex-end"><input type="checkbox" id="prueba" ${cart.prueba ? 'checked' : ''}> Venta de prueba</label></div>
         </aside>
       </div>`;
     },
@@ -646,7 +633,7 @@ const App = (() => {
         cart.clienteId = id; prellenarFactura(); saveCart(); render();
       });
       const cc = $('#clearCliente', root); if (cc) cc.onclick = () => { cart.clienteId = null; saveCart(); render(); };
-      $('#clearCart', root).onclick = () => { if (confirm('¿Vaciar la venta actual?')) { cart = emptyCart(); saveCart(); render(); } };
+      const cv = $('#clearCart', root); if (cv) cv.onclick = () => { if (confirm('¿Vaciar la venta actual?')) { cart = emptyCart(); saveCart(); render(); } };
       $('#checkout', root).onclick = registrarVenta;
       $('#prueba', root).onchange = e => { cart.prueba = e.target.checked; saveCart(); };
     },

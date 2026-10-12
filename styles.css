@@ -165,29 +165,47 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--brand-soft);
 .stk.out { background: var(--bad-soft); color: var(--bad); }
 .prod.out { opacity: .6; }
 .cart { position: sticky; top: 76px; padding: 0; overflow: hidden; }
-.cart-h { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px; border-bottom: 1px solid var(--line); }
-.cart-h h2 { margin: 0; }
-.cart-h .count { font-size: .78rem; font-weight: 700; background: var(--brand); color: var(--brand-ink); padding: 4px 11px; border-radius: 999px; }
-.blk { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+.cart-h { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.cart-h h2 { margin: 0; flex: 1; font-size: 1.05rem; }
+.cart-h .count { font-size: .74rem; font-weight: 700; background: var(--brand); color: var(--brand-ink); padding: 3px 10px; border-radius: 999px; }
+.link-btn { border: 0; background: none; color: var(--muted); font-size: .82rem; font-weight: 600; cursor: pointer; padding: 2px 4px; text-decoration: underline; }
+.link-btn:hover { color: var(--bad); }
+.blk { padding: 8px 16px 10px; display: flex; flex-direction: column; gap: 8px; }
 .blk + .blk { border-top: 1px dashed var(--line); }
-.blk-t { display: flex; align-items: center; gap: 10px; font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 800; color: var(--muted); }
-.blk-t em { font-style: normal; width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; letter-spacing: 0;
-  background: linear-gradient(135deg, #b0476b, #8c5cf0); color: #fff; font-size: .72rem; }
-.blk .empty { padding: 10px; }
-.cart-line { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
-.cart-line:first-child { padding-top: 0; }
-.cart-line .muted { font-size: .82rem; }
-.qty { display: inline-flex; align-items: center; gap: 6px; }
-.qty button { width: 30px; height: 30px; border-radius: 9px; border: 1px solid var(--glass-line); background: var(--field); cursor: pointer; font-weight: 700; }
-.qty input { width: 48px; text-align: center; padding: 5px; }
-.totals div { display: flex; justify-content: space-between; padding: 3px 0; color: var(--muted); }
-.totals .grand { font-size: 1.5rem; font-weight: 800; color: var(--ink); padding-top: 8px; margin-top: 4px; align-items: baseline; }
-.totals .grand span:first-child { font-size: 1rem; }
-.cart-foot { padding: 16px 20px 18px; border-top: 1px solid var(--line);
+.blk-t { display: flex; align-items: center; gap: 8px; min-height: 24px; font-size: .68rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 800; color: var(--muted); }
+.blk-t em { font-style: normal; width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; letter-spacing: 0;
+  background: linear-gradient(135deg, #b0476b, #8c5cf0); color: #fff; font-size: .68rem; }
+.blk-t .seg { margin-left: auto; text-transform: none; letter-spacing: 0; }
+.blk .empty { padding: 6px; font-size: .88rem; }
+.seg.mini { gap: 4px; }
+.seg.mini button { padding: 4px 10px; border-radius: 9px; font-size: .82rem; }
+.cart-line { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.cl-name b { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; font-size: .88rem; line-height: 1.25; overflow: hidden; }
+.cl-name .muted { font-size: .74rem; }
+.cl-tot { text-align: right; font-size: .9rem; min-width: 74px; }
+.cl-tot > div { display: flex; justify-content: flex-end; }
+.icon.mini { font-size: .78rem; padding: 1px 5px; font-weight: 700; }
+.qty { display: inline-flex; align-items: center; gap: 3px; }
+.qty button { width: 24px; height: 24px; border-radius: 7px; border: 1px solid var(--glass-line); background: var(--field); cursor: pointer; font-weight: 700; padding: 0; line-height: 1; }
+.qty input { width: 36px; text-align: center; padding: 3px; border-radius: 8px; }
+.desc-row { display: flex; align-items: center; gap: 8px; font-size: .82rem; }
+.desc-row .muted { flex: 1; }
+.desc-row input { width: 76px; padding: 5px 8px; border-radius: 9px; }
+.duo { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 8px; }
+.duo select { padding: 8px 10px; }
+.cli-box { display: flex; align-items: center; border: 1px solid var(--glass-line); background: var(--field); border-radius: 12px; min-width: 0; }
+.cli-pick { flex: 1; min-width: 0; border: 0; background: none; text-align: left; padding: 6px 10px; cursor: pointer; display: flex; flex-direction: column; justify-content: center; min-height: 38px; }
+.cli-pick b, .cli-pick .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .86rem; line-height: 1.25; }
+.cli-pick b + .muted { font-size: .72rem; }
+.cli-box:not(.con) .cli-pick .muted::before { content: "+ "; font-weight: 700; color: var(--brand); }
+.totals .det { font-size: .78rem; color: var(--muted); }
+.totals .grand { display: flex; justify-content: space-between; font-size: 1.35rem; font-weight: 800; color: var(--ink); align-items: baseline; }
+.totals .grand span:first-child { font-size: .95rem; }
+.cart-foot { padding: 10px 16px 12px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px;
   background: linear-gradient(135deg, var(--glass-strong), var(--brand-soft)); }
-.cart-foot > * + * { margin-top: 12px; }
-.cart-foot #checkout { padding: 14px; font-size: 1rem; border-radius: 14px; }
-.cart-foot label.row { color: var(--muted); }
+.cart-foot #checkout { padding: 12px; font-size: 1rem; border-radius: 14px; width: 100%; }
+.cart-foot .prueba { margin: 0; justify-content: flex-end; color: var(--muted); font-size: .8rem; gap: 6px; }
+.cart-foot .prueba input { width: 15px; height: 15px; }
 /* En computador el recuadro de venta tiene su propio scroll y el total con el botón quedan siempre a la vista. */
 @media (min-width: 901px) {
   .cart { top: 22px; max-height: calc(100vh - 44px); overflow-y: auto; overscroll-behavior: contain; }
@@ -263,3 +281,8 @@ td a:hover { text-decoration: underline; }
   .kpi .k { font-size: .62rem; letter-spacing: .06em; }
   .card:not(.cart) { padding: 16px; }
 }
+.blk .grid2 { gap: 8px; }
+.blk .grid2 label { margin-bottom: 3px; font-size: .66rem; }
+.blk .grid2 select, .blk .grid2 input { padding: 8px 10px; }
+.blk .grid2 .seg { flex-wrap: nowrap; gap: 4px; }
+.blk .grid2 .seg button { padding: 7px 10px; font-size: .84rem; }
