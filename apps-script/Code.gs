@@ -23,7 +23,7 @@ const HOJAS = {
   movimientos: { nombre: 'Movimientos', columnas: ['id', 'varianteId', 'cantidad', 'tipo', 'refId', 'fecha', 'nota'] },
   proveedores: { nombre: 'Proveedores', columnas: ['id', 'nombre', 'rut', 'telefono', 'email', 'notas'] },
 };
-const VERSION = 6;
+const VERSION = 7;
 const COLUMNAS_DESPACHOS = ['ventaId', 'folio', 'fecha', 'empresa', 'costo', 'estado', 'seguimiento', 'cliente', 'direccion', 'comuna', 'telefono', 'pago'];
 const COLUMNAS_FACTURAS = ['ventaId', 'folio', 'fecha', 'razonSocial', 'rut', 'giro', 'total', 'numero', 'estado'];
 const FIJAS = ['actualizado', 'eliminado', 'datos'];
@@ -68,6 +68,8 @@ function doPost(e) {
     if (body.action === 'mpLink') return json(mpLink(body));
     if (body.action === 'mpEstado') return json(mpEstado(body.ventaId));
     if (body.action === 'mpRecibidos') return json(mpRecibidos(body.dias));
+    if (body.action === 'mpPago') return json(mpPago(body.pagoId));
+    if (body.action === 'mpCuenta') return json(mpCuenta());
     return json({ ok: false, error: 'Acción desconocida' });
   } catch (err) {
     return json({ ok: false, error: String(err && err.message || err) });
@@ -282,6 +284,27 @@ function mpEstado(ventaId) {
   const data = mpFetch('https://api.mercadopago.com/v1/payments/search?sort=date_created&criteria=desc&external_reference=' + encodeURIComponent(ventaId));
   const aprobado = (data.results || []).filter(p => p.status === 'approved')[0];
   return { ok: true, pagado: !!aprobado, pagoId: aprobado ? aprobado.id : null, medio: aprobado ? aprobado.payment_type_id : null };
+}
+
+// Busca un pago por su N° de operación. Solo aparece si llegó a la cuenta de MP_TOKEN.
+function mpPago(pagoId) {
+  const id = String(pagoId || '').replace(/\D/g, '');
+  if (!id) throw new Error('Falta el N° de operación');
+  const res = UrlFetchApp.fetch('https://api.mercadopago.com/v1/payments/' + id,
+    { muteHttpExceptions: true, headers: { Authorization: 'Bearer ' + mpToken() } });
+  if ([403, 404].includes(res.getResponseCode())) return { ok: true, encontrado: false };
+  const p = JSON.parse(res.getContentText() || '{}');
+  if (res.getResponseCode() >= 300) throw new Error('MercadoPago: ' + (p.message || res.getResponseCode()));
+  const det = p.transaction_details || {};
+  return { ok: true, encontrado: true, id: p.id, estado: p.status, detalle: p.status_detail || '', monto: Math.round(Number(p.transaction_amount) || 0),
+    neto: Math.round(Number(det.net_received_amount) || 0), fecha: p.date_approved || p.date_created, ref: p.external_reference || '',
+    email: (p.payer && p.payer.email) || '', medio: p.payment_type_id || '', liberacion: p.money_release_date || '', liberado: p.money_release_status || '' };
+}
+
+// La cuenta de MercadoPago dueña del MP_TOKEN: ahí llegan los pagos de los links.
+function mpCuenta() {
+  const u = mpFetch('https://api.mercadopago.com/users/me');
+  return { ok: true, id: u.id, nickname: u.nickname || '', email: u.email || '', nombre: [u.first_name, u.last_name].filter(Boolean).join(' ') };
 }
 
 // Pagos aprobados de los últimos días (incluye los del botón de pago de la página web), para confirmar ventas "MercadoPago Web".

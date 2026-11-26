@@ -514,6 +514,10 @@ const App = (() => {
           <div class="row"><button class="btn primary" id="saveCfg">Guardar</button><button class="btn" id="syncNow">Sincronizar ahora</button>
             <span class="muted grow">${s.state === 'ok' ? 'Sincronizado' + (s.last ? ' ' + s.last.toLocaleTimeString('es-CL') : '') : esc(s.error || '')}${s.pending ? ` · ${s.pending} cambio(s) en cola` : ''}</span></div>
         </div>
+        <div class="card stack"><h2>Cuenta de MercadoPago</h2>
+          <p class="muted">Los links de pago cobran a la cuenta dueña del Access Token (MP_TOKEN) del Apps Script. El dinero queda en el saldo de esa cuenta de MercadoPago hasta que lo retires al banco.</p>
+          <div class="row"><button class="btn" id="mpCuenta">Ver cuenta conectada</button><span class="muted grow" id="mpCuentaRes"></span></div>
+        </div>
         <div class="card stack"><h2>Importar productos</h2>
           <p class="muted">Copia las celdas desde Google Sheets (con la fila de títulos) y pégalas aquí. Columnas reconocidas: producto, variante (o color / tamaño / medida), código, categoría, costo, precio, stock.</p>
           <textarea id="importText" rows="6" placeholder="producto	variante	costo	precio	stock"></textarea>
@@ -541,6 +545,18 @@ const App = (() => {
         <div><label>RUT *</label><input id="docRut" value="${esc(d.rut || '')}" placeholder="12.345.678-9"></div>
         <div><label>Giro (opcional)</label><input id="docGiro" value="${esc(d.giro || '')}"></div></div>
       <div class="row"><button class="btn small" id="docSave">Guardar</button></div></div>`;
+  }
+  const msgScript = e => e.message === 'Acción desconocida' ? 'pega la versión 7 del Apps Script (Code.gs) y publícala como nueva versión.' : e.message;
+  // N° de operación del pago (lo trae MercadoPago al confirmarse solo, o se copia del comprobante del cliente).
+  function operacionPanel(v) {
+    if (v.medioPago === 'Efectivo' || v.estado === 'anulada') return '';
+    const op = v.pago?.operacion || v.pago?.mpPagoId || '';
+    const mp = v.medioPago.startsWith('MercadoPago');
+    return `<div class="card stack"><h3 style="margin:0">N° de operación</h3>
+      <p class="muted">${mp ? 'Cópialo del comprobante de MercadoPago. Al verificarlo, la app lo busca en tu cuenta: si no aparece, ese pago no llegó a tu cuenta.' : 'Cópialo del comprobante o de la cartola para tenerlo a mano.'}</p>
+      <div class="row"><input id="opNum" class="grow" inputmode="numeric" value="${esc(String(op))}" placeholder="Ej: 123456789012">
+        <button class="btn small" id="opSave">Guardar</button>${mp ? '<button class="btn small primary" id="opCheck">Verificar en MercadoPago</button>' : ''}</div>
+      <div id="opRes"></div></div>`;
   }
   function estadoPill(v) {
     if (v.prueba) return '<span class="pill">Prueba</span>' + (v.estado === 'anulada' ? ' <span class="pill low">Anulada</span>' : '');
@@ -706,6 +722,15 @@ const App = (() => {
         catch (e) { toast('No se pudo conectar: ' + e.message); }
       };
       $('#syncNow', root).onclick = () => Sync.run();
+      $('#mpCuenta', root).onclick = async () => {
+        const out = $('#mpCuentaRes', root);
+        if (!navigator.onLine || !config.url) return toast('Se necesita internet y la planilla conectada.');
+        out.textContent = 'Consultando…';
+        try {
+          const r = await Sync.call({ action: 'mpCuenta' });
+          out.textContent = [r.nombre, r.email, r.nickname && '@' + r.nickname, 'N° de cuenta ' + r.id].filter(Boolean).join(' · ');
+        } catch (e) { out.textContent = 'No se pudo consultar: ' + msgScript(e); }
+      };
       $('#importBtn', root).onclick = () => importarProductos($('#importText').value);
       $('#importSheet', root).onclick = async () => {
         try { const r = await Sync.call({ action: 'carga' }); importarProductos(r.filas.map(f => f.join('\t')).join('\n')); }
@@ -1172,6 +1197,7 @@ const App = (() => {
         ${v.descuento ? `<tr><td>Descuento</td><td class="right num">-${clp(v.descuento)}</td></tr>` : ''}
         ${env.costo ? `<tr><td>Envío</td><td class="right num">${clp(env.costo)}</td></tr>` : ''}
         <tr><td><b>Total</b> · ${esc(v.medioPago)}</td><td class="right num"><b>${clp(v.total)}</b></td></tr></table>
+      ${operacionPanel(v)}
       ${docPanel(v)}
       ${c ? `<div class="card"><h3>Cliente</h3><table class="ficha">
         ${[['Nombre', c.nombre], ['RUT', c.rut], ['Correo', c.email], ['Teléfono', telefonoDe(c)], ['RRSS', c.rrss],
@@ -1219,6 +1245,44 @@ const App = (() => {
       });
       on('#mpCheck', async () => {
         if (await revisarPagos([v.id])) { closeModal(); openVenta(v.id); } else toast('Todavía no aparece el pago.');
+      });
+      on('#opSave', async () => {
+        const op = $('#opNum', root).value.replace(/\D/g, '');
+        await DB.save('ventas', { ...DB.get('ventas', v.id), pago: { ...(DB.get('ventas', v.id).pago || {}), operacion: op } });
+        toast(op ? 'N° de operación guardado.' : 'N° de operación borrado.');
+      });
+      on('#opCheck', async () => {
+        const op = $('#opNum', root).value.replace(/\D/g, ''), out = $('#opRes', root);
+        if (!op) return toast('Escribe el N° de operación.');
+        if (!navigator.onLine || !config.url) return toast('Se necesita internet y la planilla conectada para verificar.');
+        out.innerHTML = '<p class="muted">Buscando en MercadoPago…</p>';
+        try {
+          const r = await Sync.call({ action: 'mpPago', pagoId: op });
+          if (!r.encontrado) { out.innerHTML = '<p><span class="pill low">No está en tu cuenta</span> Ese N° de operación no existe en la cuenta de MercadoPago conectada a la app. Revisa el número, o puede que el cliente haya pagado a otra cuenta o que el comprobante no sea real.</p>'; return; }
+          const otra = DB.all('ventas').find(x => x.id !== v.id && !x.eliminado && String(x.pago?.mpPagoId || x.pago?.operacion || '') === String(r.id));
+          const montoOk = r.monto === Math.round(v.total), aprobado = r.estado === 'approved';
+          const ESTADOS = { approved: 'Aprobado', pending: 'Pendiente', in_process: 'En revisión', rejected: 'Rechazado', refunded: 'Devuelto', cancelled: 'Cancelado', charged_back: 'Contracargo' };
+          const fecha = d => d ? new Date(d).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' }) : '';
+          const avisos = [!montoOk && `El monto (${clp(r.monto)}) no coincide con el total de la venta (${clp(v.total)}).`,
+            otra && `Este pago ya está asociado a la venta ${otra.folio}.`].filter(Boolean);
+          const v2 = DB.get('ventas', v.id);
+          const puedeConfirmar = aprobado && montoOk && !otra && (v2.estado === 'pendiente' || v2.pago?.estado === 'por confirmar');
+          out.innerHTML = `<table class="ficha">
+            <tr><th>Estado</th><td><span class="pill ${aprobado ? 'ok' : 'warn'}">${esc(ESTADOS[r.estado] || r.estado)}</span></td></tr>
+            <tr><th>Monto</th><td>${clp(r.monto)}${r.neto ? ` (te llegan ${clp(r.neto)} después de comisión)` : ''}</td></tr>
+            <tr><th>Fecha</th><td>${esc(fecha(r.fecha))}</td></tr>
+            ${r.email ? `<tr><th>Pagador</th><td>${esc(r.email)}</td></tr>` : ''}
+            ${r.liberacion ? `<tr><th>Dinero disponible</th><td>${r.liberado === 'released' ? 'Ya disponible' : 'Desde el ' + esc(fecha(r.liberacion))} (en tu saldo de MercadoPago)</td></tr>` : ''}
+            </table>${avisos.map(a => `<p><span class="pill warn">Ojo</span> ${esc(a)}</p>`).join('')}
+            ${puedeConfirmar ? '<div class="row"><button class="btn primary" id="opOk">Confirmar pago con esta operación</button></div>' : ''}`;
+          const ok = $('#opOk', root);
+          if (ok) ok.onclick = async () => {
+            const detalle = { mpPagoId: r.id, operacion: String(r.id), medio: r.medio };
+            if (DB.get('ventas', v.id).estado === 'pendiente') await marcarPagada(v.id, detalle); else await confirmarPago(v.id, true, detalle);
+            toast('Pago confirmado.'); closeModal(); openVenta(v.id); render();
+          };
+          else if (!v2.pago?.operacion) await DB.save('ventas', { ...v2, pago: { ...(v2.pago || {}), operacion: op } });
+        } catch (e) { out.innerHTML = `<p><span class="pill low">Error</span> ${esc(msgScript(e))}</p>`; }
       });
       on('#mpManual', async () => {
         if (!confirm('¿Confirmas que el cliente ya pagó?')) return;
