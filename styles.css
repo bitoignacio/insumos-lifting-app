@@ -317,3 +317,10 @@ td a:hover { text-decoration: underline; }
 .hbar-track { height: 8px; border-radius: 4px; background: var(--field); }
 .hbar-fill { height: 100%; border-radius: 4px; background: var(--brand); }
 @media (max-width: 700px) { .grid2.dash { grid-template-columns: 1fr; } }
+
+.periodo { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.per-nav { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.per-nav b { min-width: 9.5em; text-align: center; }
+.per-nav button { border: 1px solid var(--glass-line); background: var(--field); color: inherit; width: 34px; height: 30px; border-radius: 9px; cursor: pointer; font-size: 1.1rem; line-height: 1; }
+.per-nav button:disabled { opacity: .35; cursor: default; }
+@media (max-width: 700px) { .periodo { align-items: stretch; } .per-nav { justify-content: space-between; } }

@@ -662,21 +662,29 @@ const App = (() => {
     return d.toISOString();
   }
   function periodoSelect(key, val) {
-    const opts = [['hoy', 'Hoy'], ['7', 'Últimos 7 días'], ['30', 'Últimos 30 días'], ['mes', 'Este mes'], ['todo', 'Todo'], ['custom', 'Personalizado']];
-    const hoy = new Date().toISOString().slice(0, 10);
-    // Meses y años anteriores, desde la primera venta registrada (al menos los últimos 12 meses).
-    const ahora = new Date(), primera = DB.all('ventas').reduce((m, v) => v.fecha < m ? v.fecha : m, ahora.toISOString());
-    const p0 = new Date(primera), cap = s => s.charAt(0).toUpperCase() + s.slice(1);
-    const meses = [], anios = [];
-    for (let d = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1), i = 0; i < 12 || d >= new Date(p0.getFullYear(), p0.getMonth(), 1); d.setMonth(d.getMonth() - 1), i++)
-      meses.push([`m:${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, cap(d.toLocaleDateString('es-CL', { month: 'long', year: 'numeric' }))]);
-    for (let y = ahora.getFullYear(); y >= Math.min(p0.getFullYear(), ahora.getFullYear() - 1); y--) anios.push([`a:${y}`, y === ahora.getFullYear() ? `Este año (${y})` : `Año ${y}`]);
-    const opt = ([k, n]) => `<option value="${k}" ${val === k ? 'selected' : ''}>${n}</option>`;
-    return `<select data-periodo="${key}" style="width:auto">${opts.map(opt).join('')}
-      <optgroup label="Meses anteriores">${meses.map(opt).join('')}</optgroup><optgroup label="Años">${anios.map(opt).join('')}</optgroup></select>
-      ${val === 'custom' ? `<label class="row" style="margin:0">Desde <input type="date" data-rango="${key}Desde" value="${state[key + 'Desde'] || hoy}" style="width:auto"></label>
-        <label class="row" style="margin:0">Hasta <input type="date" data-rango="${key}Hasta" value="${state[key + 'Hasta'] || hoy}" style="width:auto"></label>` : ''}`;
+    // Botones de periodo; Mes y Año se recorren con flechas en vez de una lista larga.
+    const hoyD = new Date(), hoy = hoyD.toISOString().slice(0, 10);
+    const mk = d => `m:${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, mesAct = mk(hoyD);
+    const esMes = val === 'mes' || val.startsWith('m:'), esAnio = val.startsWith('a:');
+    const btn = (k, n, on) => `<button data-per="${k}" class="${on ? 'on' : ''}">${n}</button>`;
+    let nav = '';
+    if (esMes) {
+      const [y, m] = (val === 'mes' ? mesAct : val).slice(2).split('-').map(Number);
+      const txt = new Date(y, m - 1, 1).toLocaleDateString('es-CL', { month: 'long', year: 'numeric' });
+      const sig = mk(new Date(y, m, 1));
+      nav = `<div class="per-nav"><button data-per="${mk(new Date(y, m - 2, 1))}" aria-label="Mes anterior">‹</button><b>${txt.charAt(0).toUpperCase() + txt.slice(1)}</b>
+        <button data-per="${sig > mesAct ? '' : sig === mesAct ? 'mes' : sig}" ${sig > mesAct ? 'disabled' : ''} aria-label="Mes siguiente">›</button></div>`;
+    } else if (esAnio) {
+      const y = Number(val.slice(2));
+      nav = `<div class="per-nav"><button data-per="a:${y - 1}" aria-label="Año anterior">‹</button><b>${y}</b>
+        <button data-per="a:${y + 1}" ${y >= hoyD.getFullYear() ? 'disabled' : ''} aria-label="Año siguiente">›</button></div>`;
+    }
+    return `<div class="periodo" data-periodo="${key}"><div class="seg mini">${btn('hoy', 'Hoy', val === 'hoy')}${btn('7', '7 días', val === '7')}${btn('30', '30 días', val === '30')}${btn('mes', 'Mes', esMes)}${btn('a:' + hoyD.getFullYear(), 'Año', esAnio)}${btn('todo', 'Todo', val === 'todo')}${btn('custom', 'Fechas', val === 'custom')}</div>
+      ${nav}
+      ${val === 'custom' ? `<div class="per-nav"><label class="row" style="margin:0">Desde <input type="date" data-rango="${key}Desde" value="${state[key + 'Desde'] || hoy}" style="width:auto"></label>
+        <label class="row" style="margin:0">Hasta <input type="date" data-rango="${key}Hasta" value="${state[key + 'Hasta'] || hoy}" style="width:auto"></label></div>` : ''}</div>`;
   }
+
 
   // ---------- Render y eventos ----------
   // Agrupa los redibujos: un cambio que llega mientras se redibuja (por ejemplo al salir de un campo) no rompe la pantalla.
@@ -695,9 +703,11 @@ const App = (() => {
     main.innerHTML = views[view]();
     $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
     bind[view] && bind[view](main);
-    $$('[data-periodo]', main).forEach(s => s.onchange = () => {
-      state[s.dataset.periodo] = s.value;
-      if (s.value === 'custom') { const hoy = new Date().toISOString().slice(0, 10); state[s.dataset.periodo + 'Desde'] ||= hoy; state[s.dataset.periodo + 'Hasta'] ||= hoy; }
+    $$('[data-periodo] [data-per]', main).forEach(b => b.onclick = () => {
+      const key = b.closest('[data-periodo]').dataset.periodo, val = b.dataset.per;
+      if (!val) return;
+      state[key] = val;
+      if (val === 'custom') { const hoy = new Date().toISOString().slice(0, 10); state[key + 'Desde'] ||= hoy; state[key + 'Hasta'] ||= hoy; }
       render();
     });
     $$('[data-rango]', main).forEach(i => i.onchange = () => { state[i.dataset.rango] = i.value; render(); });
