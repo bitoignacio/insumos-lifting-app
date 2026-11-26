@@ -643,6 +643,13 @@ const App = (() => {
       const hasta = h ? new Date(new Date(h + 'T00:00:00').getTime() + 864e5).toISOString() : '';
       return { desde: d ? new Date(d + 'T00:00:00').toISOString() : '', hasta };
     }
+    // Un mes ("m:2026-10") o un año ("a:2025") completos.
+    if (/^[ma]:/.test(p)) {
+      const [y, m] = p.slice(2).split('-').map(Number);
+      const ini = p[0] === 'm' ? new Date(y, m - 1, 1) : new Date(y, 0, 1);
+      const fin = p[0] === 'm' ? new Date(y, m, 1) : new Date(y + 1, 0, 1);
+      return { desde: ini.toISOString(), hasta: fin.toISOString() };
+    }
     return { desde: periodoDesde(p), hasta: '' };
   }
   const enRango = (fecha, r) => (!r.desde || fecha >= r.desde) && (!r.hasta || fecha < r.hasta);
@@ -657,7 +664,16 @@ const App = (() => {
   function periodoSelect(key, val) {
     const opts = [['hoy', 'Hoy'], ['7', 'Últimos 7 días'], ['30', 'Últimos 30 días'], ['mes', 'Este mes'], ['todo', 'Todo'], ['custom', 'Personalizado']];
     const hoy = new Date().toISOString().slice(0, 10);
-    return `<select data-periodo="${key}" style="width:auto">${opts.map(([k, n]) => `<option value="${k}" ${val === k ? 'selected' : ''}>${n}</option>`).join('')}</select>
+    // Meses y años anteriores, desde la primera venta registrada (al menos los últimos 12 meses).
+    const ahora = new Date(), primera = DB.all('ventas').reduce((m, v) => v.fecha < m ? v.fecha : m, ahora.toISOString());
+    const p0 = new Date(primera), cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+    const meses = [], anios = [];
+    for (let d = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1), i = 0; i < 12 || d >= new Date(p0.getFullYear(), p0.getMonth(), 1); d.setMonth(d.getMonth() - 1), i++)
+      meses.push([`m:${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, cap(d.toLocaleDateString('es-CL', { month: 'long', year: 'numeric' }))]);
+    for (let y = ahora.getFullYear(); y >= Math.min(p0.getFullYear(), ahora.getFullYear() - 1); y--) anios.push([`a:${y}`, y === ahora.getFullYear() ? `Este año (${y})` : `Año ${y}`]);
+    const opt = ([k, n]) => `<option value="${k}" ${val === k ? 'selected' : ''}>${n}</option>`;
+    return `<select data-periodo="${key}" style="width:auto">${opts.map(opt).join('')}
+      <optgroup label="Meses anteriores">${meses.map(opt).join('')}</optgroup><optgroup label="Años">${anios.map(opt).join('')}</optgroup></select>
       ${val === 'custom' ? `<label class="row" style="margin:0">Desde <input type="date" data-rango="${key}Desde" value="${state[key + 'Desde'] || hoy}" style="width:auto"></label>
         <label class="row" style="margin:0">Hasta <input type="date" data-rango="${key}Hasta" value="${state[key + 'Hasta'] || hoy}" style="width:auto"></label>` : ''}`;
   }

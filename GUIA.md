@@ -6,7 +6,7 @@
 - **Inventario**: productos con opciones, alertas de stock bajo, **conteo de inventario** para revisar todo el stock de una vez, ajustes con motivo, valor del inventario, y eliminar varios productos a la vez marcando sus casillas (las ventas y compras anteriores se mantienen).
 - **Compras**: lista de proveedores (agregar, editar, eliminar), registra compras que suman stock y actualizan el costo, y permite eliminar una compra (descuenta el stock).
 - **Clientes**: nombre, RUT, teléfono con código de país (+56 por defecto), email, RRSS, origen (RRSS / Web / WhatsApp), dirección con sugerencias que completan comuna y región, datos de facturación, y opción de eliminar cliente (sus ventas pasadas se mantienen).
-- **Dashboard**: filtro por periodo o fechas personalizadas; ventas, ganancia y margen, N° de ventas y venta promedio (con % vs el periodo anterior), gráfico de ventas por día (o por mes), pendientes (pagos por confirmar, documentos por emitir, despachos por enviar, stock bajo; se tocan para ir a verlos), más vendidos, por medio de pago y por canal.
+- **Dashboard**: filtro por periodo (también meses y años anteriores, igual que en Ventas) o fechas personalizadas; ventas, ganancia y margen, N° de ventas y venta promedio (con % vs el periodo anterior), gráfico de ventas por día (o por mes), pendientes (pagos por confirmar, documentos por emitir, despachos por enviar, stock bajo; se tocan para ir a verlos), más vendidos, por medio de pago y por canal.
 - **Sin internet**: todo se guarda en el equipo y se envía a la planilla al volver la conexión.
 
 ## Conectar la planilla (una sola vez)
