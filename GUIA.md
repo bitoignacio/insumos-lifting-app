@@ -32,7 +32,7 @@
 2. En el Apps Script: ícono ⚙ **Configuración del proyecto > Propiedades de la secuencia de comandos > Agregar propiedad**. Nombre `MP_TOKEN`, valor: el token.
 3. En la app, al elegir **MercadoPago** el botón dice **Generar link de pago**. La venta queda **pendiente de pago** y los productos reservados. La app revisa sola cada pocos minutos y cierra la venta cuando MercadoPago confirma el pago. También puedes tocar **Revisar pago**, **Marcar como pagada** o **Cancelar venta**.
 4. **N° de operación**: en cada venta pagada con tarjeta, transferencia o MercadoPago puedes anotar el N° de operación del comprobante. En las de MercadoPago, **Verificar en MercadoPago** lo busca en tu cuenta: muestra estado, monto, fecha, pagador y cuándo queda disponible el dinero. Si dice "No está en tu cuenta", ese pago no llegó a la cuenta conectada.
-5. **Ajustes > Cuenta de MercadoPago > Ver cuenta conectada** muestra a qué cuenta llegan los pagos de los links. El dinero queda en el saldo de MercadoPago hasta que lo retires al banco.
+5. **Ajustes > Cuenta de MercadoPago** muestra siempre a qué cuenta llegan los pagos de los links. El dinero queda en el saldo de MercadoPago hasta que lo retires al banco.
 
 ## Cargar los productos
 1. En la hoja **Carga de productos** ya están tus precios. El stock puede quedar vacío.

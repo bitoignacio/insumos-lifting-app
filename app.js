@@ -515,8 +515,8 @@ const App = (() => {
             <span class="muted grow">${s.state === 'ok' ? 'Sincronizado' + (s.last ? ' ' + s.last.toLocaleTimeString('es-CL') : '') : esc(s.error || '')}${s.pending ? ` · ${s.pending} cambio(s) en cola` : ''}</span></div>
         </div>
         <div class="card stack"><h2>Cuenta de MercadoPago</h2>
-          <p class="muted">Los links de pago cobran a la cuenta dueña del Access Token (MP_TOKEN) del Apps Script. El dinero queda en el saldo de esa cuenta de MercadoPago hasta que lo retires al banco.</p>
-          <div class="row"><button class="btn" id="mpCuenta">Ver cuenta conectada</button><span class="muted grow" id="mpCuentaRes"></span></div>
+          <p class="muted">Aquí llegan los pagos de los links (es la cuenta dueña del Access Token MP_TOKEN del Apps Script). El dinero queda en el saldo de esa cuenta de MercadoPago hasta que lo retires al banco.</p>
+          <div class="row"><span class="grow" id="mpCuentaRes">${config.mpCuenta ? esc(config.mpCuenta) : '<span class="muted">Aún no se ha consultado.</span>'}</span><button class="btn small" id="mpCuenta">Actualizar</button></div>
         </div>
         <div class="card stack"><h2>Importar productos</h2>
           <p class="muted">Copia las celdas desde Google Sheets (con la fila de títulos) y pégalas aquí. Columnas reconocidas: producto, variante (o color / tamaño / medida), código, categoría, costo, precio, stock.</p>
@@ -722,15 +722,19 @@ const App = (() => {
         catch (e) { toast('No se pudo conectar: ' + e.message); }
       };
       $('#syncNow', root).onclick = () => Sync.run();
-      $('#mpCuenta', root).onclick = async () => {
+      // La cuenta conectada se consulta sola al abrir Ajustes y queda guardada para verla sin internet.
+      const verCuentaMp = async (avisar) => {
         const out = $('#mpCuentaRes', root);
-        if (!navigator.onLine || !config.url) return toast('Se necesita internet y la planilla conectada.');
-        out.textContent = 'Consultando…';
+        if (!navigator.onLine || !config.url) { if (avisar) toast('Se necesita internet y la planilla conectada.'); return; }
+        if (avisar) out.textContent = 'Consultando…';
         try {
           const r = await Sync.call({ action: 'mpCuenta' });
-          out.textContent = [r.nombre, r.email, r.nickname && '@' + r.nickname, 'N° de cuenta ' + r.id].filter(Boolean).join(' · ');
-        } catch (e) { out.textContent = 'No se pudo consultar: ' + msgScript(e); }
+          config.mpCuenta = [r.nombre, r.email, r.nickname && '@' + r.nickname, 'N° de cuenta ' + r.id].filter(Boolean).join(' · ');
+          saveConfig(); out.textContent = config.mpCuenta;
+        } catch (e) { if (avisar || !config.mpCuenta) out.textContent = 'No se pudo consultar: ' + msgScript(e); }
       };
+      $('#mpCuenta', root).onclick = () => verCuentaMp(true);
+      verCuentaMp(false);
       $('#importBtn', root).onclick = () => importarProductos($('#importText').value);
       $('#importSheet', root).onclick = async () => {
         try { const r = await Sync.call({ action: 'carga' }); importarProductos(r.filas.map(f => f.join('\t')).join('\n')); }
