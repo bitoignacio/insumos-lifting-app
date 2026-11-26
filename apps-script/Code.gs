@@ -23,7 +23,7 @@ const HOJAS = {
   movimientos: { nombre: 'Movimientos', columnas: ['id', 'varianteId', 'cantidad', 'tipo', 'refId', 'fecha', 'nota'] },
   proveedores: { nombre: 'Proveedores', columnas: ['id', 'nombre', 'rut', 'telefono', 'email', 'notas'] },
 };
-const VERSION = 7;
+const VERSION = 8;
 const COLUMNAS_DESPACHOS = ['ventaId', 'folio', 'fecha', 'empresa', 'costo', 'estado', 'seguimiento', 'cliente', 'direccion', 'comuna', 'telefono', 'pago'];
 const COLUMNAS_FACTURAS = ['ventaId', 'folio', 'fecha', 'razonSocial', 'rut', 'giro', 'total', 'numero', 'estado'];
 const FIJAS = ['actualizado', 'eliminado', 'datos'];
@@ -70,6 +70,8 @@ function doPost(e) {
     if (body.action === 'mpRecibidos') return json(mpRecibidos(body.dias));
     if (body.action === 'mpPago') return json(mpPago(body.pagoId));
     if (body.action === 'mpCuenta') return json(mpCuenta());
+    if (body.action === 'mpConectar') return json(mpConectar(body.token));
+    if (body.action === 'mpDesconectar') return json(mpDesconectar());
     return json({ ok: false, error: 'Acción desconocida' });
   } catch (err) {
     return json({ ok: false, error: String(err && err.message || err) });
@@ -303,8 +305,29 @@ function mpPago(pagoId) {
 
 // La cuenta de MercadoPago dueña del MP_TOKEN: ahí llegan los pagos de los links.
 function mpCuenta() {
-  const u = mpFetch('https://api.mercadopago.com/users/me');
-  return { ok: true, id: u.id, nickname: u.nickname || '', email: u.email || '', nombre: [u.first_name, u.last_name].filter(Boolean).join(' ') };
+  if (!PropertiesService.getScriptProperties().getProperty('MP_TOKEN')) return { ok: true, conectada: false };
+  return mpDatosCuenta(mpToken());
+}
+
+function mpDatosCuenta(token) {
+  const res = UrlFetchApp.fetch('https://api.mercadopago.com/users/me', { muteHttpExceptions: true, headers: { Authorization: 'Bearer ' + token } });
+  const u = JSON.parse(res.getContentText() || '{}');
+  if (res.getResponseCode() >= 300) throw new Error(res.getResponseCode() === 401 ? 'MercadoPago no reconoce ese Access Token' : 'MercadoPago: ' + (u.message || res.getResponseCode()));
+  return { ok: true, conectada: true, id: u.id, nickname: u.nickname || '', email: u.email || '', nombre: [u.first_name, u.last_name].filter(Boolean).join(' ') };
+}
+
+// Cambia la cuenta de los links: guarda el Access Token solo si MercadoPago lo acepta. El token nunca se devuelve a la app.
+function mpConectar(token) {
+  const t = String(token || '').trim();
+  if (!/^APP_USR-/.test(t)) throw new Error('Pega el Access Token de producción (empieza con APP_USR-)');
+  const cuenta = mpDatosCuenta(t);
+  PropertiesService.getScriptProperties().setProperty('MP_TOKEN', t);
+  return cuenta;
+}
+
+function mpDesconectar() {
+  PropertiesService.getScriptProperties().deleteProperty('MP_TOKEN');
+  return { ok: true, conectada: false };
 }
 
 // Pagos aprobados de los últimos días (incluye los del botón de pago de la página web), para confirmar ventas "MercadoPago Web".

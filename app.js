@@ -517,6 +517,11 @@ const App = (() => {
         <div class="card stack"><h2>Cuenta de MercadoPago</h2>
           <p class="muted">Aquí llegan los pagos de los links (es la cuenta dueña del Access Token MP_TOKEN del Apps Script). El dinero queda en el saldo de esa cuenta de MercadoPago hasta que lo retires al banco.</p>
           <div class="row"><span class="grow" id="mpCuentaRes">${config.mpCuenta ? esc(config.mpCuenta) : '<span class="muted">Aún no se ha consultado.</span>'}</span><button class="btn small" id="mpCuenta">Actualizar</button></div>
+          <details><summary>Cambiar o desconectar la cuenta</summary><div class="stack" style="margin-top:8px">
+            <p class="muted">Para conectar otra cuenta, entra con ella a mercadopago.cl/developers > Tus integraciones > Credenciales de producción y copia su Access Token (empieza con APP_USR-). Cada cuenta tiene su propio token.</p>
+            <div><label>Access Token de la nueva cuenta</label><input id="mpToken" type="password" autocomplete="off" placeholder="APP_USR-…"></div>
+            <div class="row"><button class="btn primary" id="mpConectar">Conectar esta cuenta</button><button class="btn danger" id="mpDesconectar">Desconectar MercadoPago</button></div>
+          </div></details>
         </div>
         <div class="card stack"><h2>Importar productos</h2>
           <p class="muted">Copia las celdas desde Google Sheets (con la fila de títulos) y pégalas aquí. Columnas reconocidas: producto, variante (o color / tamaño / medida), código, categoría, costo, precio, stock.</p>
@@ -546,7 +551,8 @@ const App = (() => {
         <div><label>Giro (opcional)</label><input id="docGiro" value="${esc(d.giro || '')}"></div></div>
       <div class="row"><button class="btn small" id="docSave">Guardar</button></div></div>`;
   }
-  const msgScript = e => e.message === 'Acción desconocida' ? 'pega la versión 7 del Apps Script (Code.gs) y publícala como nueva versión.' : e.message;
+  const textoCuentaMp = r => r.conectada === false ? 'Sin cuenta conectada' : [r.nombre, r.email, r.nickname && '@' + r.nickname, 'N° de cuenta ' + r.id].filter(Boolean).join(' · ');
+  const msgScript = e => e.message === 'Acción desconocida' ? 'pega la versión 8 del Apps Script (Code.gs) y publícala como nueva versión.' : e.message;
   // N° de operación del pago (lo trae MercadoPago al confirmarse solo, o se copia del comprobante del cliente).
   function operacionPanel(v) {
     if (v.medioPago === 'Efectivo' || v.estado === 'anulada') return '';
@@ -729,11 +735,30 @@ const App = (() => {
         if (avisar) out.textContent = 'Consultando…';
         try {
           const r = await Sync.call({ action: 'mpCuenta' });
-          config.mpCuenta = [r.nombre, r.email, r.nickname && '@' + r.nickname, 'N° de cuenta ' + r.id].filter(Boolean).join(' · ');
-          saveConfig(); out.textContent = config.mpCuenta;
+          config.mpCuenta = textoCuentaMp(r); saveConfig(); out.textContent = config.mpCuenta;
         } catch (e) { if (avisar || !config.mpCuenta) out.textContent = 'No se pudo consultar: ' + msgScript(e); }
       };
       $('#mpCuenta', root).onclick = () => verCuentaMp(true);
+      $('#mpConectar', root).onclick = async () => {
+        const token = $('#mpToken', root).value.trim();
+        if (!token) return toast('Pega el Access Token de la cuenta nueva.');
+        if (!navigator.onLine || !config.url) return toast('Se necesita internet y la planilla conectada.');
+        try {
+          const r = await Sync.call({ action: 'mpConectar', token });
+          config.mpCuenta = textoCuentaMp(r); saveConfig();
+          $('#mpToken', root).value = ''; $('#mpCuentaRes', root).textContent = config.mpCuenta;
+          toast('Cuenta de MercadoPago conectada.');
+        } catch (e) { toast('No se pudo conectar: ' + msgScript(e)); }
+      };
+      $('#mpDesconectar', root).onclick = async () => {
+        if (!confirm('¿Desconectar MercadoPago? No se podrán generar links de pago ni revisar pagos hasta conectar una cuenta.')) return;
+        if (!navigator.onLine || !config.url) return toast('Se necesita internet y la planilla conectada.');
+        try {
+          const r = await Sync.call({ action: 'mpDesconectar' });
+          config.mpCuenta = textoCuentaMp(r); saveConfig(); $('#mpCuentaRes', root).textContent = config.mpCuenta;
+          toast('MercadoPago desconectado.');
+        } catch (e) { toast('No se pudo desconectar: ' + msgScript(e)); }
+      };
       verCuentaMp(false);
       $('#importBtn', root).onclick = () => importarProductos($('#importText').value);
       $('#importSheet', root).onclick = async () => {
