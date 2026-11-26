@@ -72,8 +72,8 @@ const App = (() => {
     const s = rutLimpio(r);
     return s.length < 2 ? (r || '') : s.slice(0, -1).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '-' + s.slice(-1);
   }
-  function folio(prefix) {
-    const d = new Date();
+  const isoDia = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  function folio(prefix, d = new Date()) {
     const ymd = String(d.getFullYear()).slice(2) + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
     return `${prefix}${ymd}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
   }
@@ -129,7 +129,12 @@ const App = (() => {
     if (faltan.length && !confirm('Hay productos sin stock suficiente:\n' + faltan.map(l => '• ' + nombreVariante(variante(l.varianteId))).join('\n') + '\n\n¿Registrar la venta igual?')) return;
 
     const id = DB.uid();
-    const fecha = new Date().toISOString();
+    // "Fecha anterior": la venta queda con el día elegido (y la hora actual); registradaEn guarda cuándo se ingresó.
+    const ahora = new Date(), hoy = isoDia(ahora);
+    if (cart.fechaVenta && cart.fechaVenta > hoy) return toast('La fecha de la venta no puede ser futura.');
+    const fechaD = cart.fechaVenta && cart.fechaVenta < hoy
+      ? new Date(`${cart.fechaVenta}T${ahora.toTimeString().slice(0, 8)}`) : ahora;
+    const fecha = fechaD.toISOString();
     // Reparte el descuento general entre las líneas para que la ganancia por producto sea correcta.
     const items = cart.lines.map(l => {
       const v = variante(l.varianteId);
@@ -139,7 +144,8 @@ const App = (() => {
         cantidad: l.cantidad, precio: l.precio, descuento: lt.desc + parte, total: lt.total, costo: v.costo || 0 };
     });
     const venta = {
-      id, folio: folio('V'), fecha, usuario: config.usuario || '', clienteId: cart.clienteId,
+      id, folio: folio('V', fechaD), fecha, usuario: config.usuario || '', clienteId: cart.clienteId,
+      ...(fechaD !== ahora ? { registradaEn: ahora.toISOString() } : {}),
       items, subtotal: t.subtotal, descuento: t.descuento, total: t.total, medioPago: cart.medioPago,
       canal: cart.canal || canalNorm(cliente(cart.clienteId)?.origen) || CANALES[0],
       // Solo informativo: la boleta o factura se emite a mano en el SII y aquí se anota el número.
@@ -318,7 +324,9 @@ const App = (() => {
               <div class="grand"><span>Total</span><span>${clp(t.total)}</span></div>
             </div>
             <button class="btn primary" id="checkout" ${cart.lines.length ? '' : 'disabled'}>${cart.medioPago === 'MercadoPago' ? 'Generar link de pago' : 'Registrar venta'}</button>
-            <label class="row prueba"><input type="checkbox" id="prueba" ${cart.prueba ? 'checked' : ''}> Venta de prueba</label>
+            <div class="row prueba"><label class="row" style="margin:0"><input type="checkbox" id="prueba" ${cart.prueba ? 'checked' : ''}> Venta de prueba</label>
+              <label class="row" style="margin:0"><input type="checkbox" id="fechaAnt" ${cart.fechaVenta ? 'checked' : ''}> Fecha anterior</label>
+              ${cart.fechaVenta ? `<input type="date" id="fechaVenta" value="${esc(cart.fechaVenta)}" max="${isoDia(new Date())}" aria-label="Fecha de la venta" style="width:auto">` : ''}</div>
           </div>
         </aside>
       </div>`;
@@ -658,6 +666,10 @@ const App = (() => {
       const cv = $('#clearCart', root); if (cv) cv.onclick = () => { if (confirm('¿Vaciar la venta actual?')) { cart = emptyCart(); saveCart(); render(); } };
       $('#checkout', root).onclick = registrarVenta;
       $('#prueba', root).onchange = e => { cart.prueba = e.target.checked; saveCart(); };
+      $('#fechaAnt', root).onchange = e => {
+        cart.fechaVenta = e.target.checked ? isoDia(new Date(Date.now() - 864e5)) : ''; saveCart(); render();
+      };
+      const fv = $('#fechaVenta', root); if (fv) fv.onchange = e => { cart.fechaVenta = e.target.value; saveCart(); };
     },
     ventas(root) {
       onInput($('#ventasQ', root), v => state.ventasQ = v);
@@ -1215,6 +1227,7 @@ const App = (() => {
     const env = v.envio || {};
     modal('Venta ' + v.folio, `<div class="stack">
       <div class="muted">${new Date(v.fecha).toLocaleString('es-CL')} ${v.usuario ? '· ' + esc(v.usuario) : ''} ${estadoPill(v)}</div>
+      ${v.registradaEn ? `<div class="muted">Ingresada el ${new Date(v.registradaEn).toLocaleString('es-CL')} con fecha anterior</div>` : ''}
       ${v.estado === 'pendiente' ? `<div class="card stack"><h3>Pago MercadoPago pendiente</h3>
         <p class="muted">Los productos quedan reservados. La venta se cierra sola cuando MercadoPago confirma el pago.</p>
         ${v.pago?.link ? `<input id="mpLink" readonly value="${esc(v.pago.link)}">

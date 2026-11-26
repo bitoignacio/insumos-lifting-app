@@ -206,6 +206,8 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--brand-soft);
 .cart-foot #checkout { padding: 12px; font-size: 1rem; border-radius: 14px; width: 100%; }
 .cart-foot .prueba { margin: 0; justify-content: flex-end; color: var(--muted); font-size: .8rem; gap: 6px; }
 .cart-foot .prueba input { width: 15px; height: 15px; }
+.cart-foot .prueba input[type=date] { width: auto; height: auto; font-size: .8rem; padding: 2px 6px; }
+.cart-foot .prueba label { gap: 6px; }
 /* En computador el recuadro de venta tiene su propio scroll y el total con el botón quedan siempre a la vista. */
 @media (min-width: 901px) {
   .cart { top: 22px; height: calc(100vh - 44px); height: calc(100dvh - 44px); overflow-y: auto; overscroll-behavior: contain;
