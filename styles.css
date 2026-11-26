@@ -112,6 +112,7 @@ main { padding: 16px; max-width: 1320px; margin: 0 auto; }
 .row > .grow { flex: 1; min-width: 0; }
 .stack > * + * { margin-top: 14px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+[hidden] { display: none !important; }
 @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }
 label { display: block; font-size: .74rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin-bottom: 5px; }
 label.row, .filtros-panel label, label:has(> input[type=checkbox]) { text-transform: none; letter-spacing: 0; font-size: .9rem; font-weight: 500; }
