@@ -295,3 +295,25 @@ td a:hover { text-decoration: underline; }
 .blk .grid2 select, .blk .grid2 input { padding: 8px 10px; }
 .blk .grid2 .seg { flex-wrap: nowrap; gap: 4px; }
 .blk .grid2 .seg button { padding: 7px 10px; font-size: .84rem; }
+
+/* Dashboard */
+.delta { font-size: .82rem; font-weight: 700; }
+.delta.up { color: var(--ok); }
+.delta.down { color: var(--bad); }
+.chart { position: relative; }
+.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart text { font-size: 11px; fill: var(--muted); }
+.chart .max { font-weight: 700; }
+.chart .eje { stroke: var(--line); stroke-width: 1; }
+.chart .barra { fill: var(--brand); transition: opacity .15s; }
+.chart:hover .col .barra { opacity: .55; }
+.chart .col.on .barra { opacity: 1; }
+.chart .tip { position: absolute; top: -6px; pointer-events: none; background: var(--glass-strong); border: 1px solid var(--glass-line);
+  box-shadow: var(--shadow); border-radius: 10px; padding: 6px 10px; font-size: .8rem; white-space: nowrap; transform: translateY(-100%); }
+.hbars { display: flex; flex-direction: column; gap: 10px; }
+.hbar-t { display: flex; justify-content: space-between; gap: 10px; font-size: .86rem; margin-bottom: 4px; }
+.hbar-t span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar-t .num { color: var(--muted); white-space: nowrap; }
+.hbar-track { height: 8px; border-radius: 4px; background: var(--field); }
+.hbar-fill { height: 100%; border-radius: 4px; background: var(--brand); }
+@media (max-width: 700px) { .grid2.dash { grid-template-columns: 1fr; } }

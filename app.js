@@ -464,38 +464,70 @@ const App = (() => {
     resumen() {
       const periodo = state.resPeriodo || '30';
       const rango = periodoRango('resPeriodo');
-      const ventas = DB.all('ventas').filter(v => v.estado === 'completada' && !v.prueba && enRango(v.fecha, rango));
-      let neto = 0, costo = 0, envios = 0;
-      const porPago = {}, porProd = {}, porOrigen = {};
+      const validas = DB.all('ventas').filter(v => v.estado === 'completada' && !v.prueba);
+      const ventas = validas.filter(v => enRango(v.fecha, rango));
+      // Mismo largo de periodo justo antes, para comparar (no aplica a "Todo").
+      const desdeMs = rango.desde ? new Date(rango.desde).getTime() : 0, hastaMs = rango.hasta ? new Date(rango.hasta).getTime() : Date.now();
+      const previas = desdeMs ? validas.filter(v => { const t = new Date(v.fecha).getTime(); return t >= desdeMs - (hastaMs - desdeMs) && t < desdeMs; }) : null;
+      const cifras = vs => {
+        let neto = 0, costo = 0, envios = 0;
+        for (const v of vs) { envios += v.envio?.costo || 0; for (const it of v.items) { neto += it.total - (it.descuento - (it.precio * it.cantidad - it.total)); costo += it.costo * it.cantidad; } }
+        return { neto, costo, envios, ganancia: neto - costo, n: vs.length };
+      };
+      const k = cifras(ventas), kp = previas && cifras(previas);
+      const delta = (a, b) => {
+        if (!kp || !b) return '<div class="muted">&nbsp;</div>';
+        const d = Math.round((a - b) / Math.abs(b) * 100);
+        return `<div class="${d >= 0 ? 'delta up' : 'delta down'}">${d >= 0 ? '▲' : '▼'} ${Math.abs(d)}% vs periodo anterior</div>`;
+      };
+      const porPago = {}, porProd = {}, porCanal = {};
       for (const v of ventas) {
-        envios += v.envio?.costo || 0;
         porPago[v.medioPago] = (porPago[v.medioPago] || 0) + v.total;
-        const o = canalDe(v) || 'Sin dato';
-        porOrigen[o] = (porOrigen[o] || 0) + 1;
+        const c = canalDe(v) || 'Sin dato'; porCanal[c] = (porCanal[c] || 0) + v.total;
         for (const it of v.items) {
           const venta = it.total - (it.descuento - (it.precio * it.cantidad - it.total));
-          neto += venta; costo += it.costo * it.cantidad;
-          const k = it.nombre; porProd[k] = porProd[k] || { u: 0, monto: 0 }; porProd[k].u += it.cantidad; porProd[k].monto += venta;
+          const p = porProd[it.nombre] ||= { u: 0, monto: 0 }; p.u += it.cantidad; p.monto += venta;
         }
       }
-      const top = Object.entries(porProd).sort((a, b) => b[1].u - a[1].u).slice(0, 10);
+      // Ventas por día (o por mes si el periodo es largo).
+      const primera = ventas.reduce((m, v) => v.fecha < m ? v.fecha : m, new Date().toISOString());
+      const ini = new Date(rango.desde || primera); ini.setHours(0, 0, 0, 0);
+      const fin = rango.hasta ? new Date(new Date(rango.hasta).getTime() - 1) : new Date();
+      const porMes = (fin - ini) / 864e5 > 62;
+      const claveDe = d => porMes ? isoDia(d).slice(0, 7) : isoDia(d);
+      const serie = [];
+      for (const d = new Date(ini); d <= fin; porMes ? d.setMonth(d.getMonth() + 1, 1) : d.setDate(d.getDate() + 1)) serie.push({ key: claveDe(d), d: new Date(d), monto: 0, n: 0 });
+      const idx = Object.fromEntries(serie.map((x, i) => [x.key, i]));
+      for (const v of ventas) { const i = idx[claveDe(new Date(v.fecha))]; if (i != null) { serie[i].monto += v.total; serie[i].n++; } }
+      const etiqueta = x => porMes ? x.d.toLocaleDateString('es-CL', { month: 'short', year: '2-digit' }) : x.d.toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short' });
+      // Pendientes en todo el historial (no solo el periodo).
+      const todas = DB.all('ventas').filter(v => v.estado !== 'anulada' && !v.prueba);
+      const nConfirmar = todas.filter(v => !pagoConfirmado(v)).length;
+      const nEmitir = todas.filter(v => v.documento?.estado === 'por emitir').length;
+      const nDespachos = todas.filter(v => v.envio?.tipo === 'despacho' && ESTADOS_ENVIO.slice(0, 2).includes(v.envio.estado)).length;
       const bajos = [];
       for (const p of productosActivos()) for (const v of variantesDe(p.id)) if (stockOf(v.id) <= (p.stockMin ?? 0)) bajos.push(v);
-      const box = (t, obj) => `<div class="card"><h3>${t}</h3><table>${Object.entries(obj).map(([k, n]) => `<tr><td>${esc(k)}</td><td class="right num">${typeof n === 'number' && t.includes('pago') ? clp(n) : n}</td></tr>`).join('') || '<tr><td class="muted">Sin datos</td></tr>'}</table></div>`;
+      const tarea = (id, t, n, txt) => `<button class="card kpi" id="${id}"><div class="k">${t}</div><div class="v num">${n}</div><div class="${n ? 'warn' : 'muted'}">${n ? txt : 'Todo al día'}</div></button>`;
       return `<div class="stack">
-        <div class="row"><h2 class="grow">Resumen</h2>${periodoSelect('resPeriodo', periodo)}</div>
+        <div class="page-head"><h1>Dashboard</h1>${periodoSelect('resPeriodo', periodo)}</div>
         <div class="kpis">
-          <div class="card kpi"><div class="muted">Ventas (sin envío)</div><div class="v">${clp(neto)}</div></div>
-          <div class="card kpi"><div class="muted">Costo de lo vendido</div><div class="v">${clp(costo)}</div></div>
-          <div class="card kpi"><div class="muted">Ganancia</div><div class="v">${clp(neto - costo)}</div><div class="muted">${neto ? Math.round((neto - costo) / neto * 100) : 0}% margen</div></div>
-          <div class="card kpi"><div class="muted">N° de ventas</div><div class="v">${ventas.length}</div><div class="muted">Promedio ${clp(ventas.length ? neto / ventas.length : 0)}</div></div>
-          <div class="card kpi"><div class="muted">Envíos cobrados</div><div class="v">${clp(envios)}</div></div>
+          <div class="card kpi"><div class="k">Ventas (sin envío)</div><div class="v num">${clp(k.neto)}</div>${delta(k.neto, kp?.neto)}</div>
+          <div class="card kpi"><div class="k">Ganancia</div><div class="v num">${clp(k.ganancia)}</div><div class="muted">${k.neto ? Math.round(k.ganancia / k.neto * 100) : 0}% de margen · costo ${clp(k.costo)}</div></div>
+          <div class="card kpi"><div class="k">N° de ventas</div><div class="v num">${k.n}</div>${delta(k.n, kp?.n)}</div>
+          <div class="card kpi"><div class="k">Venta promedio</div><div class="v num">${clp(k.n ? k.neto / k.n : 0)}</div><div class="muted">Envíos cobrados ${clp(k.envios)}</div></div>
         </div>
-        <div class="grid2">
-          ${box('Por medio de pago', porPago)}
-          ${box('Ventas por canal', porOrigen)}
-          <div class="card"><h3>Más vendidos</h3><table>${top.map(([k, d]) => `<tr><td>${esc(k)}</td><td class="right num">${d.u} u.</td><td class="right num">${clp(d.monto)}</td></tr>`).join('') || '<tr><td class="muted">Sin datos</td></tr>'}</table></div>
-          <div class="card"><h3>Stock bajo (${bajos.length})</h3><table>${bajos.slice(0, 15).map(v => `<tr><td>${esc(nombreVariante(v))}</td><td class="right"><span class="pill low">${stockOf(v.id)}</span></td></tr>`).join('') || '<tr><td class="muted">Todo en orden</td></tr>'}</table></div>
+        <div class="card stack"><h3 style="margin:0">Ventas por ${porMes ? 'mes' : 'día'}</h3>${graficoColumnas(serie.map(x => ({ label: etiqueta(x), valor: x.monto, detalle: `${x.n} venta(s)` })))}</div>
+        <div class="kpis">
+          ${tarea('dPagos', 'Pagos por confirmar', nConfirmar, 'Toca para verlos')}
+          ${tarea('dDocs', 'Documentos por emitir', nEmitir, 'Toca para verlos')}
+          ${tarea('dEnvios', 'Despachos por enviar', nDespachos, 'Toca para verlos')}
+          ${tarea('dStock', 'Stock bajo', bajos.length, 'Toca para ver inventario')}
+        </div>
+        <div class="grid2 dash">
+          <div class="card stack"><h3 style="margin:0">Más vendidos</h3>${barras(Object.entries(porProd).sort((a, b) => b[1].monto - a[1].monto).slice(0, 8).map(([n, d]) => ({ label: n, valor: d.monto, extra: `${d.u} u.` })))}</div>
+          <div class="card stack"><h3 style="margin:0">Por medio de pago</h3>${barras(Object.entries(porPago).sort((a, b) => b[1] - a[1]).map(([n, x]) => ({ label: n, valor: x })))}</div>
+          <div class="card stack"><h3 style="margin:0">Por canal</h3>${barras(Object.entries(porCanal).sort((a, b) => b[1] - a[1]).map(([n, x]) => ({ label: n, valor: x, icono: iconoCanal(n) })))}</div>
+          <div class="card stack"><h3 style="margin:0">Stock bajo (${bajos.length})</h3><table>${bajos.slice(0, 8).map(v => `<tr><td>${esc(nombreVariante(v))}</td><td class="right"><span class="pill low">${stockOf(v.id)}</span></td></tr>`).join('') || '<tr><td class="muted">Todo en orden</td></tr>'}</table></div>
         </div></div>`;
     },
 
@@ -571,6 +603,32 @@ const App = (() => {
       <div class="row"><input id="opNum" class="grow" inputmode="numeric" value="${esc(String(op))}" placeholder="Ej: 123456789012">
         <button class="btn small" id="opSave">Guardar</button>${mp ? '<button class="btn small primary" id="opCheck">Verificar en MercadoPago</button>' : ''}</div>
       <div id="opRes"></div></div>`;
+  }
+  // Gráficos del Dashboard: una sola serie en el color de la marca, con detalle al pasar el dedo o el mouse.
+  function graficoColumnas(datos) {
+    if (!datos.some(d => d.valor)) return '<div class="empty">Sin ventas en este periodo.</div>';
+    const W = 720, H = 220, top = 14, bottom = 26, left = 8, n = datos.length;
+    const max = Math.max(...datos.map(d => d.valor)), paso = (W - left * 2) / n, ancho = Math.max(2, Math.min(36, paso - 2));
+    const y = v => top + (H - top - bottom) * (1 - v / max);
+    const cada = Math.ceil(n / 8);
+    return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Ventas por periodo">
+      <line x1="${left}" x2="${W - left}" y1="${H - bottom}" y2="${H - bottom}" class="eje"/>
+      ${datos.map((d, i) => {
+        const x = left + paso * i + (paso - ancho) / 2, yy = y(d.valor), h = H - bottom - yy;
+        return `<g class="col" data-tip="${esc(d.label)}|${clp(d.valor)}|${esc(d.detalle || '')}">
+          <rect x="${left + paso * i}" y="${top}" width="${paso}" height="${H - top - bottom}" fill="transparent"/>
+          ${!d.valor ? '' : h < 6 || ancho < 9 ? `<rect x="${x}" y="${yy}" width="${ancho}" height="${h}" class="barra"/>`
+            : `<path d="M${x},${H - bottom}V${yy + 4}q0,-4 4,-4h${ancho - 8}q4,0 4,4V${H - bottom}z" class="barra"/>`}
+          ${i % cada === 0 ? `<text x="${x + ancho / 2}" y="${H - 8}" text-anchor="middle">${esc(d.label)}</text>` : ''}</g>`;
+      }).join('')}
+      <text x="${left}" y="10" class="max">Máx. ${clp(max)}</text></svg><div class="tip" hidden></div></div>`;
+  }
+  function barras(filas) {
+    if (!filas.length) return '<div class="muted">Sin datos</div>';
+    const max = Math.max(...filas.map(f => f.valor)) || 1, total = filas.reduce((s, f) => s + f.valor, 0) || 1;
+    return `<div class="hbars">${filas.map(f => `<div class="hbar"><div class="hbar-t"><span>${f.icono || ''} ${esc(f.label)}</span>
+      <span class="num">${clp(f.valor)}${f.extra ? ` · ${esc(f.extra)}` : ` · ${Math.round(f.valor / total * 100)}%`}</span></div>
+      <div class="hbar-track"><div class="hbar-fill" style="width:${Math.max(1, f.valor / max * 100)}%"></div></div></div>`).join('')}</div>`;
   }
   function estadoPill(v) {
     if (v.prueba) return '<span class="pill">Prueba</span>' + (v.estado === 'anulada' ? ' <span class="pill low">Anulada</span>' : '');
@@ -729,6 +787,30 @@ const App = (() => {
       onInput($('#cliQ', root), v => state.cliQ = v);
       $('#newCliente', root).onclick = () => editCliente(null);
       $$('[data-cliente]', root).forEach(r => r.onclick = () => editCliente(r.dataset.cliente));
+    },
+    resumen(root) {
+      const ir = (fn) => () => { fn(); render(); };
+      $('#dPagos', root).onclick = ir(() => { Object.assign(state, { porConfirmar: true, docEstados: null, docTipos: null, canales: null, ventasPeriodo: 'todo' }); view = 'ventas'; });
+      $('#dDocs', root).onclick = ir(() => { Object.assign(state, { porConfirmar: false, docEstados: ['por emitir'], docTipos: null, canales: null, ventasPeriodo: 'todo' }); view = 'ventas'; });
+      $('#dEnvios', root).onclick = ir(() => { Object.assign(state, { porConfirmar: false, docEstados: null, docTipos: null, canales: null, ventasPeriodo: 'todo', ventasQ: '' }); view = 'ventas'; });
+      $('#dStock', root).onclick = ir(() => { view = 'inventario'; });
+      const chart = $('.chart', root);
+      if (chart) {
+        const tip = $('.tip', chart);
+        const mostrar = e => {
+          const g = e.target.closest('.col');
+          $$('.col.on', chart).forEach(x => x.classList.remove('on'));
+          if (!g) { tip.hidden = true; return; }
+          g.classList.add('on');
+          const [t, m, d] = g.dataset.tip.split('|');
+          tip.innerHTML = `<b>${t}</b><br>${m}${d ? `<br><span class="muted">${d}</span>` : ''}`;
+          tip.hidden = false;
+          const r = chart.getBoundingClientRect(), gr = g.getBoundingClientRect();
+          tip.style.left = Math.min(Math.max(gr.left - r.left + gr.width / 2 - tip.offsetWidth / 2, 0), r.width - tip.offsetWidth) + 'px';
+        };
+        chart.onmousemove = mostrar; chart.onclick = mostrar;
+        chart.onmouseleave = () => { tip.hidden = true; $$('.col.on', chart).forEach(x => x.classList.remove('on')); };
+      }
     },
     ajustes(root) {
       $('#cfgUsuario', root).onchange = e => { config.usuario = e.target.value.trim(); saveConfig(); };
